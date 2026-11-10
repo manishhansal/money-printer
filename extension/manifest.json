@@ -9,6 +9,10 @@
     "sidePanel",
     "tabs"
   ],
+  "host_permissions": [
+    "http://localhost/*",
+    "https://localhost/*"
+  ],
   "background": {
     "service_worker": "dist/background/background.js"
   },
