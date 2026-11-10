@@ -25,14 +25,18 @@
 
 ## Overview
 
-MoneyPrinter is a production-grade autonomous quantitative trading platform for NSE options via
-the Dhan broker API. It combines a **NestJS TypeScript backend** (CloudEngine) with a
-**Chrome Extension MV3** control plane, providing fully automated signal generation, risk
-management, order execution, and real-time position monitoring.
+MoneyPrinter is a production-grade autonomous quantitative trading platform for NSE **options buying** via the Dhan broker API. It combines a **NestJS TypeScript backend** (CloudEngine) with a **Chrome Extension MV3** control plane, providing fully automated signal generation, risk management, order execution, and real-time position monitoring.
 
 **Two operating modes:**
-- **Paper Trading** — real Dhan market data, simulated fills, isolated `paper_*` tables and `paper:*` Redis keys. Safe for testing.
+- **Paper Trading** — real Dhan market data, simulated fills, isolated `paper_*` tables. Safe for testing. Default capital: ₹50,000 (configurable from popup).
 - **Live Trading** — real orders to Dhan. Requires explicit two-step arming from the Chrome Extension.
+
+**Key design decisions:**
+- Options buying only — INDEX_FUTURE and STOCK_FUTURE are structurally blocked
+- Greedy trailing — after first target, auto-select CHANDELIER or ATR trail based on market conditions
+- Net P&L after all charges — STT at 0.1% (Budget 2024), tracked via shared `TradingChargesService`
+- Broker-side safety net — P&L exit API configured at 09:15 IST; Dhan closes positions even if CloudEngine crashes
+- Configurable capital — paper capital set via popup settings panel (default ₹50K)
 
 ---
 
@@ -328,7 +332,9 @@ After loading, open the extension popup and set:
 | `npm run start:dev` | Dev server with hot-reload (file changes auto-restart) |
 | `npm run start:prod` | Run the compiled production build from `dist/` |
 | `npm run build` | Compile TypeScript to `dist/` |
-| `npm test` | Run all 1,442 unit tests |
+| `npm run build:extension` | Bundle Chrome Extension to `extension/dist/` |
+| `npm run build:extension:watch` | Extension watch mode — rebuild on every file change |
+| `npm test` | Run all 1,442+ unit tests |
 | `npm run test:cov` | Tests with coverage report |
 | `npm run test:extension` | Chrome Extension tests only |
 | `npm run migration:run` | Apply all pending DB migrations |
@@ -393,6 +399,34 @@ CloudEngine (NestJS)
 Infrastructure: PostgreSQL 15 │ Redis 7 │ NestJS EventEmitter2
 ```
 
+## Architecture
+
+```
+Chrome Extension (MV3)
+  BSW ──ws://localhost:3003──> CloudEngine  │  Popup  │  SidePanel  │  Dashboard
+
+CloudEngine (NestJS)
+  MarketData → TechnicalAnalysis → OptionsIntelligence
+  MarketRegime (10 regimes, VIX override)
+  InstrumentDiscovery (options-only: Nifty/BankNifty/etc + NSE_FNO stocks)
+  Strategy (8 strategies A–H, 5-gate evaluation)
+  SignalScoring (8-component composite, ≥80 threshold)
+  TradingChargesService (STT 0.1% Budget 2024; single source of truth)
+  RiskManagement (8 gates, state machine, VIX sizing)
+  Execution (5-check pre-trade; getOrderById for order status)
+  TrailingStop (8 mechanisms; PARTIAL_PROFIT → GreedyTrailService)
+  GreedyTrailService (3 conditions → CHANDELIER or ATR auto-trail)
+  PositionMonitoring (MFE/MAE, partial profit, greedy exit decision)
+  LiveTrading (two-step arm; kill switch + Dhan setKillSwitch; broker P&L exit)
+  PaperTrading (fully isolated; options-buying only; ₹50K default capital)
+  SessionManager (8 NSE phases, mandatory 15:15 IST square-off)
+  Portfolio (Dynamic Capital, GET /portfolio/summary with net P&L)
+  Settings (GET/PUT /settings; configurable capital + risk %)
+  SystemHealthMonitor (6 metrics, 90s TTL, 30s poll)
+
+Infrastructure: PostgreSQL 15 (port 5435) │ Redis 7 (port 6380) │ NestJS EventEmitter2
+```
+
 Full details: [docs/architecture.md](docs/architecture.md)
 
 ---
@@ -446,14 +480,14 @@ Full details: [docs/architecture.md](docs/architecture.md)
 
 | File | Contents |
 |---|---|
-| [docs/architecture.md](docs/architecture.md) | Layer diagram, module graph, event flows |
-| [docs/system-design.md](docs/system-design.md) | Data models, Redis key schema, event bus design |
-| [docs/api-spec.md](docs/api-spec.md) | REST API endpoints, request/response schemas |
-| [docs/security.md](docs/security.md) | Threat model, controls, compliance |
-| [docs/deployment.md](docs/deployment.md) | Local dev setup, environment variables, production checklist |
-| [docs/aws-deployment.md](docs/aws-deployment.md) | Full AWS production deployment guide (ECS Fargate + RDS + ElastiCache) |
-| [docs/development.md](docs/development.md) | Module conventions, contributing guidelines |
-| [docs/chrome-extension.md](docs/chrome-extension.md) | Extension architecture, messaging, security invariants |
+| [docs/architecture.md](docs/architecture.md) | Layer diagram, module graph, event flows, signal→trade flow |
+| [docs/system-design.md](docs/system-design.md) | Data models, Redis key schema, trading approach, charges |
+| [docs/api-spec.md](docs/api-spec.md) | REST API endpoints (portfolio, settings, signals, options flow) |
+| [docs/security.md](docs/security.md) | Threat model, controls, broker safety net |
+| [docs/deployment.md](docs/deployment.md) | Local dev setup (step-by-step), env vars, production checklist |
+| [docs/aws-deployment.md](docs/aws-deployment.md) | Full AWS production deployment (ECS Fargate + RDS + ElastiCache) |
+| [docs/development.md](docs/development.md) | Module conventions, charge rates, contributing guidelines |
+| [docs/chrome-extension.md](docs/chrome-extension.md) | Extension architecture, messages, settings panel, security |
 
 ---
 
