@@ -9,11 +9,10 @@
  *   for both LIVE and PAPER engines, sourced from the CapitalLedgers table.
  */
 
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PaperTrade } from '../../database/entities/paper-trades.entity';
 import { Trade } from '../../database/entities/trades.entity';
 
@@ -116,7 +115,6 @@ export class PortfolioController {
    * }
    */
   @Get('summary')
-  @UseGuards(JwtAuthGuard)
   async getSummary(): Promise<PortfolioSummaryResponse> {
     const startOfDay = new Date();
     startOfDay.setUTCHours(0, 0, 0, 0);

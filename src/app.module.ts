@@ -18,6 +18,7 @@ import { ThrottlerExceptionFilter } from './common/filters/throttler-exception.f
 import { CsrfMiddleware } from './common/middleware/csrf.middleware';
 import { PipelineWiringModule } from './modules/event-wiring/pipeline-wiring.module';
 import { JournalWiringModule } from './modules/event-wiring/journal-wiring.module';
+import { PortfolioModule } from './modules/portfolio/portfolio.module';
 
 /**
  * Root application module.
@@ -125,6 +126,10 @@ import { JournalWiringModule } from './modules/event-wiring/journal-wiring.modul
     // to TradeJournal write paths; installs GlobalExceptionFilter for health reporting
     // (Requirements 13.1, 10.1).
     JournalWiringModule,
+
+    // Portfolio — Dynamic_Capital tracking, open position management, and
+    // GET /portfolio/summary endpoint for Chrome Extension P&L display.
+    PortfolioModule,
 
     // Redis channel wiring — bridges events:regime_change and events:session_phase
     // pub/sub channels to in-process service handlers; also ensures
