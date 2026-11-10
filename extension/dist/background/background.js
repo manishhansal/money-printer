@@ -4,7 +4,10 @@
   var INITIAL_STATE = {
     armedState: "DISARMED",
     sessionToken: null,
-    connectionState: "disconnected"
+    connectionState: "disconnected",
+    sessionPnl: 0,
+    activePositionsCount: 0,
+    healthStatus: "Healthy"
   };
 
   // extension/src/background/state.manager.ts
@@ -34,7 +37,8 @@
   }
 
   // extension/src/background/background.ts
-  var DEFAULT_WSS_URL = "wss://localhost:3000";
+  var DEFAULT_WSS_URL = "wss://localhost:3003";
+  var DEFAULT_HTTP_URL = "http://localhost:3002";
   var RECOVERY_TIMEOUT_MS = 5e3;
   var RECONNECT_DELAY_MS = 3e3;
   var TIMEOUT_SENTINEL = /* @__PURE__ */ Symbol("RECOVERY_TIMEOUT");
@@ -65,8 +69,11 @@
           // Never auto-re-arm
           sessionToken: result.sessionToken,
           // Preserved for re-authentication
-          connectionState: "disconnected"
+          connectionState: "disconnected",
           // Fresh WSS connection will be established
+          sessionPnl: 0,
+          activePositionsCount: 0,
+          healthStatus: "Healthy"
         };
       } else {
         currentState = { ...INITIAL_STATE };
@@ -116,6 +123,42 @@
   function _resetStateForTesting() {
     currentState = { ...INITIAL_STATE };
     activeSocket = null;
+  }
+  chrome.runtime.onMessage.addListener(
+    (message, _sender, sendResponse) => {
+      if (message.type === "GET_STATE") {
+        fetchSessionPnl().then((pnl) => {
+          sendResponse({ ...currentState, ...pnl });
+        }).catch(() => {
+          sendResponse({
+            ...currentState,
+            sessionPnl: 0,
+            activePositionsCount: 0,
+            healthStatus: "Down"
+          });
+        });
+        return true;
+      }
+    }
+  );
+  async function fetchSessionPnl() {
+    const token = currentState.sessionToken;
+    const baseUrl = DEFAULT_HTTP_URL;
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await fetch(`${baseUrl}/portfolio/summary`, { headers });
+    if (!res.ok) {
+      return { sessionPnl: 0, activePositionsCount: 0, healthStatus: "Degraded" };
+    }
+    const data = await res.json();
+    const isLive = currentState.armedState === "ARMED";
+    const netPnl = isLive ? data.live?.netPnl ?? 0 : data.paper?.netPnl ?? 0;
+    return {
+      sessionPnl: netPnl,
+      activePositionsCount: 0,
+      // Extended in future via /portfolio/positions
+      healthStatus: "Healthy"
+    };
   }
   chrome.runtime.onInstalled.addListener(async () => {
     await recoverState();

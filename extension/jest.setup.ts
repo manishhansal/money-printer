@@ -22,6 +22,7 @@
     sendMessage: jest.fn(),
     onInstalled: { addListener: jest.fn() },
     onStartup: { addListener: jest.fn() },
+    onMessage: { addListener: jest.fn() },
   },
 };
 

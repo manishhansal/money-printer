@@ -30,6 +30,7 @@ import { PaperExecution } from '../../database/entities/paper-executions.entity'
 import { PaperPosition } from '../../database/entities/paper-positions.entity';
 import { PaperTrade } from '../../database/entities/paper-trades.entity';
 
+import { TradingChargesModule } from '../charges/trading-charges.module';
 import { PaperTradingService } from './paper-trading.service';
 
 @Module({
@@ -38,6 +39,8 @@ import { PaperTradingService } from './paper-trading.service';
     // Only paper_ prefixed tables are registered here. Live engine tables
     // (orders, executions, positions, trades) are explicitly NOT included.
     TypeOrmModule.forFeature([PaperOrder, PaperExecution, PaperPosition, PaperTrade]),
+    // Shared charge-calculation service (single source of truth for NSE F&O costs).
+    TradingChargesModule,
     // RedisModule is registered globally in AppModule — no re-import needed.
     // PaperTradingService injects RedisService via the global provider.
   ],

@@ -42,6 +42,7 @@ import { PaperTrade } from '../../database/entities/paper-trades.entity';
 
 import { RedisService } from '../redis/redis.service';
 import { MarketSnapshot } from '../market-data/market-data.types';
+import { TradingChargesService } from '../charges/trading-charges.service';
 
 import {
   PAPER_PORTFOLIO_BALANCE_KEY,
@@ -112,8 +113,11 @@ export class PaperTradingService {
     private readonly paperTradesRepo: Repository<PaperTrade>,
 
     // ── RedisService (global) — paper: namespace writes only ─────────────────
-    // This is the ONLY service injected here. No LiveEngine services are used.
+    // This is the ONLY non-charges service injected here. No LiveEngine services.
     private readonly redisService: RedisService,
+
+    // ── TradingChargesService — single source of truth for NSE F&O costs ─────
+    private readonly chargesService: TradingChargesService,
   ) {}
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -643,8 +647,7 @@ export class PaperTradingService {
 
       // If fully closed, record the PaperTrade
       if (remainingQty === 0) {
-        const costs = this.calculateTradingCosts(entryPrice, fillPrice, exitQty);
-
+        const costs = this.chargesService.calculate(entryPrice, fillPrice, exitQty);
         const grossPnl = (fillPrice - entryPrice) * exitQty;
         const netPnl = grossPnl - costs.total;
 
@@ -723,7 +726,7 @@ export class PaperTradingService {
       const savedPosition = await this.paperPositionsRepo.save(openPosition);
 
       if (remainingQty === 0) {
-        const costs = this.calculateTradingCosts(entryPrice, fillPrice, exitQty);
+        const costs = this.chargesService.calculate(entryPrice, fillPrice, exitQty);
         // SHORT P&L: entry - exit (positive when price drops)
         const grossPnl = (entryPrice - fillPrice) * exitQty;
         const netPnl = grossPnl - costs.total;
@@ -805,48 +808,6 @@ export class PaperTradingService {
    *  - Exchange charges:  0.053% of total turnover (NSE options).
    *  - GST:               18% on (brokerage + exchange charges).
    *  - SEBI charges:      ₹10 per crore of total turnover.
-   *  - Stamp duty:        0.003% of buy-side turnover only.
-   */
-  private calculateTradingCosts(
-    entryPrice: number,
-    exitPrice: number,
-    quantity: number,
-  ): PaperTradingCosts {
-    const buyTurnover = entryPrice * quantity;
-    const sellTurnover = exitPrice * quantity;
-    const totalTurnover = buyTurnover + sellTurnover;
-
-    // ₹20 flat per side (entry + exit = ₹40 total)
-    const brokerage = 40;
-
-    // STT: 0.05% of sell-side premium
-    const stt = sellTurnover * 0.0005;
-
-    // NSE exchange charges: 0.053% of total turnover
-    const exchangeCharges = totalTurnover * 0.00053;
-
-    // GST: 18% of (brokerage + exchange charges)
-    const gst = (brokerage + exchangeCharges) * 0.18;
-
-    // SEBI charges: ₹10 per crore = 0.000001 × turnover
-    const sebiCharges = totalTurnover * 0.000001;
-
-    // Stamp duty: 0.003% of buy-side only
-    const stampDuty = buyTurnover * 0.00003;
-
-    const total = brokerage + stt + exchangeCharges + gst + sebiCharges + stampDuty;
-
-    return {
-      brokerage,
-      stt,
-      exchangeCharges,
-      gst,
-      sebiCharges,
-      stampDuty,
-      total,
-    };
-  }
-
   /**
    * Marks a PaperOrder as 'rejected' and publishes an order event.
    */
