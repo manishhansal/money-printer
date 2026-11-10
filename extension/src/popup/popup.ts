@@ -21,7 +21,9 @@ export type BswMessage =
   | { type: 'REQUEST_ARM' }
   | { type: 'CONFIRM_ARM' }
   | { type: 'DISARM' }
-  | { type: 'OPEN_SIDE_PANEL' };
+  | { type: 'OPEN_SIDE_PANEL' }
+  | { type: 'GET_SETTINGS' }
+  | { type: 'SAVE_SETTINGS'; payload: { paperStartingCapital: string; defaultRiskPercentage: string } };
 
 /** Runtime chrome shim — defined globally by the browser extension environment. */
 declare const chrome: {
@@ -182,6 +184,16 @@ export async function initPopup(): Promise<void> {
         window.close(); // close popup after opening side panel
       });
 
+      // ── Settings: load current values from CloudEngine ──────────────────
+      loadSettings();
+
+      // ── Settings: update risk hint when capital changes ──────────────────
+      document.getElementById('paper-capital-input')?.addEventListener('input', updateRiskHint);
+      document.getElementById('risk-pct-input')?.addEventListener('input', updateRiskHint);
+
+      // ── Settings: save button ─────────────────────────────────────────────
+      document.getElementById('save-settings-btn')?.addEventListener('click', saveSettings);
+
       resolve();
     });
   });
@@ -214,6 +226,83 @@ function setVisible(el: HTMLElement, visible: boolean): void {
   } else {
     el.classList.add('hidden');
   }
+}
+
+// ---------------------------------------------------------------------------
+// Settings helpers — load, display and save paper capital config
+// ---------------------------------------------------------------------------
+
+/** Fetch current settings from CloudEngine and populate the input fields. */
+function loadSettings(): void {
+  fetch('http://localhost:3002/settings')
+    .then((r) => r.json() as Promise<{ paperStartingCapital: string; defaultRiskPercentage: string; paperRiskPerTrade: string; paperDailyLossLimitRupees: string }>)
+    .then((s) => {
+      const capitalEl = document.getElementById('paper-capital-input') as HTMLInputElement | null;
+      const riskEl = document.getElementById('risk-pct-input') as HTMLInputElement | null;
+      if (capitalEl) capitalEl.value = parseFloat(s.paperStartingCapital).toFixed(0);
+      if (riskEl) riskEl.value = parseFloat(s.defaultRiskPercentage).toFixed(1);
+      updateRiskHint();
+    })
+    .catch(() => { /* server unreachable — keep HTML defaults */ });
+}
+
+/** Recompute and display the derived risk/daily-limit hint below the capital input. */
+function updateRiskHint(): void {
+  const capitalEl = document.getElementById('paper-capital-input') as HTMLInputElement | null;
+  const riskEl = document.getElementById('risk-pct-input') as HTMLInputElement | null;
+  const hintEl = document.getElementById('risk-hint');
+  if (!capitalEl || !riskEl || !hintEl) return;
+
+  const capital = parseFloat(capitalEl.value) || 0;
+  const riskPct = parseFloat(riskEl.value) || 1;
+  const riskPerTrade = (capital * riskPct / 100).toFixed(0);
+  const dailyLimit = (capital * 2 / 100).toFixed(0);  // 2% daily loss limit
+  hintEl.textContent = `Risk/trade: ₹${riskPerTrade} · Daily limit: ₹${dailyLimit}`;
+}
+
+/** Save updated settings to CloudEngine via PUT /settings. */
+function saveSettings(): void {
+  const capitalEl = document.getElementById('paper-capital-input') as HTMLInputElement | null;
+  const riskEl = document.getElementById('risk-pct-input') as HTMLInputElement | null;
+  const statusEl = document.getElementById('settings-status');
+  const saveBtn = document.getElementById('save-settings-btn') as HTMLButtonElement | null;
+
+  if (!capitalEl || !riskEl) return;
+
+  const capital = parseFloat(capitalEl.value);
+  const riskPct = parseFloat(riskEl.value);
+
+  if (isNaN(capital) || capital < 10000) {
+    if (statusEl) { statusEl.style.color = '#f44336'; statusEl.textContent = 'Min capital: ₹10,000'; }
+    return;
+  }
+
+  if (saveBtn) saveBtn.disabled = true;
+  if (statusEl) { statusEl.style.color = '#9e9e9e'; statusEl.textContent = 'Saving…'; }
+
+  fetch('http://localhost:3002/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      paperStartingCapital: capital.toFixed(2),
+      defaultRiskPercentage: riskPct.toFixed(4),
+    }),
+  })
+    .then((r) => {
+      if (r.ok) {
+        if (statusEl) { statusEl.style.color = '#4caf50'; statusEl.textContent = '✓ Saved'; }
+        updateRiskHint();
+      } else {
+        if (statusEl) { statusEl.style.color = '#f44336'; statusEl.textContent = 'Save failed'; }
+      }
+    })
+    .catch(() => {
+      if (statusEl) { statusEl.style.color = '#f44336'; statusEl.textContent = 'Server unreachable'; }
+    })
+    .finally(() => {
+      if (saveBtn) saveBtn.disabled = false;
+      setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
+    });
 }
 
 // ---------------------------------------------------------------------------

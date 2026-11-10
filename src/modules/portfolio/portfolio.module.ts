@@ -30,6 +30,7 @@ import { SystemHealthEvents } from '../../database/entities/system-health-events
 
 import { PortfolioService } from './portfolio.service';
 import { PortfolioController } from './portfolio.controller';
+import { SettingsController } from './settings.controller';
 
 @Module({
   imports: [
@@ -42,7 +43,7 @@ import { PortfolioController } from './portfolio.controller';
       SystemHealthEvents,
     ]),
   ],
-  controllers: [PortfolioController],
+  controllers: [PortfolioController, SettingsController],
   providers: [PortfolioService],
   exports: [PortfolioService],
 })

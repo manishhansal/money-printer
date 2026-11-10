@@ -29,6 +29,7 @@ import { PaperOrder } from '../../database/entities/paper-orders.entity';
 import { PaperExecution } from '../../database/entities/paper-executions.entity';
 import { PaperPosition } from '../../database/entities/paper-positions.entity';
 import { PaperTrade } from '../../database/entities/paper-trades.entity';
+import { UserSettings } from '../../database/entities/user-settings.entity';
 
 import { TradingChargesModule } from '../charges/trading-charges.module';
 import { PaperTradingService } from './paper-trading.service';
@@ -41,6 +42,8 @@ import { PaperTradingService } from './paper-trading.service';
     TypeOrmModule.forFeature([PaperOrder, PaperExecution, PaperPosition, PaperTrade]),
     // Shared charge-calculation service (single source of truth for NSE F&O costs).
     TradingChargesModule,
+    // UserSettings — read paper starting capital from DB (not hardcoded).
+    TypeOrmModule.forFeature([UserSettings]),
     // RedisModule is registered globally in AppModule — no re-import needed.
     // PaperTradingService injects RedisService via the global provider.
   ],

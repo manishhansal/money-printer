@@ -39,6 +39,7 @@ import { PaperOrder } from '../../database/entities/paper-orders.entity';
 import { PaperExecution } from '../../database/entities/paper-executions.entity';
 import { PaperPosition } from '../../database/entities/paper-positions.entity';
 import { PaperTrade } from '../../database/entities/paper-trades.entity';
+import { UserSettings } from '../../database/entities/user-settings.entity';
 
 import { RedisService } from '../redis/redis.service';
 import { MarketSnapshot } from '../market-data/market-data.types';
@@ -118,6 +119,10 @@ export class PaperTradingService {
 
     // ── TradingChargesService — single source of truth for NSE F&O costs ─────
     private readonly chargesService: TradingChargesService,
+
+    // ── UserSettings — paper starting capital is read from DB, not hardcoded ──
+    @InjectRepository(UserSettings)
+    private readonly userSettingsRepo: Repository<UserSettings>,
   ) {}
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -174,6 +179,30 @@ export class PaperTradingService {
         status: 'rejected',
         rejectionReason: 'duplicate idempotency key',
       };
+    }
+
+    // ── Options-buying-only guard ─────────────────────────────────────────────
+    // The paper engine only supports LONG (buy) entries. A SELL order is only
+    // valid as a closing transaction for an existing LONG position.
+    if (transactionType === 'SELL') {
+      const hasOpenPosition = await this.paperPositionsRepo.findOne({
+        where: { instrument_id: instrumentId, is_open: true },
+      });
+      if (!hasOpenPosition) {
+        this.logger.warn(
+          `[PaperOrder] Rejected SHORT entry for ${instrumentId} — ` +
+            `paper engine is configured for options-buying only.`,
+        );
+        return {
+          orderId: `rejected-short-${Date.now()}`,
+          status: 'rejected',
+          rejectionReason: 'short selling is disabled — options buying only',
+          fillPrice: undefined,
+          fillTimestamp: undefined,
+          simulatedLatencyMs: undefined,
+          slippageApplied: undefined,
+        };
+      }
     }
 
     // ── Step 2: Persist PaperOrder (status = 'submitted') ───────────────────
@@ -403,18 +432,28 @@ export class PaperTradingService {
 
   /**
    * Returns the current paper portfolio balance from Redis.
-   * If no balance has been initialised, returns the default starting capital.
+   * Lazily initialises from UserSettings.paperStartingCapital (DB-configured).
+   * Falls back to ₹50,000 if no UserSettings row exists.
    *
    * Key: `paper:portfolio:balance`
    */
   async getPortfolioBalance(): Promise<string> {
     const stored = await this.redisService.get(PAPER_PORTFOLIO_BALANCE_KEY);
     if (!stored) {
-      // Lazy-initialise the balance on first access
-      await this.redisService.set(PAPER_PORTFOLIO_BALANCE_KEY, PAPER_STARTING_CAPITAL);
-      return PAPER_STARTING_CAPITAL;
+      const startingCapital = await this.getPaperStartingCapital();
+      await this.redisService.set(PAPER_PORTFOLIO_BALANCE_KEY, startingCapital);
+      return startingCapital;
     }
     return stored;
+  }
+
+  /**
+   * Reads paperStartingCapital from UserSettings DB row.
+   * Falls back to PAPER_STARTING_CAPITAL constant if no settings row exists.
+   */
+  async getPaperStartingCapital(): Promise<string> {
+    const settings = await this.userSettingsRepo.findOne({ where: {} });
+    return settings?.paperStartingCapital ?? PAPER_STARTING_CAPITAL;
   }
 
   /**
