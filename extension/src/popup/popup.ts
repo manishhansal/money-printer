@@ -223,8 +223,7 @@ function setVisible(el: HTMLElement, visible: boolean): void {
 /* istanbul ignore next */
 if (
   typeof document !== 'undefined' &&
-  typeof process !== 'undefined' &&
-  process.env['NODE_ENV'] !== 'test'
+  (typeof process === 'undefined' || process.env['NODE_ENV'] !== 'test')
 ) {
   document.addEventListener('DOMContentLoaded', () => {
     initPopup().catch(console.error);

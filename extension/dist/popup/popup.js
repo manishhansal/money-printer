@@ -95,7 +95,7 @@
       el.classList.add("hidden");
     }
   }
-  if (typeof document !== "undefined" && typeof process !== "undefined" && true) {
+  if (typeof document !== "undefined" && (typeof process === "undefined" || true)) {
     document.addEventListener("DOMContentLoaded", () => {
       initPopup().catch(console.error);
     });
