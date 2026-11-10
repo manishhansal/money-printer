@@ -44,13 +44,19 @@
     }
   }
   function handleActivate() {
-    chrome.runtime.sendMessage({ type: "REQUEST_ARM" });
+    chrome.runtime.sendMessage({ type: "REQUEST_ARM" }, (state) => {
+      if (state) renderState(state);
+    });
   }
   function handleConfirm() {
-    chrome.runtime.sendMessage({ type: "CONFIRM_ARM" });
+    chrome.runtime.sendMessage({ type: "CONFIRM_ARM" }, (state) => {
+      if (state) renderState(state);
+    });
   }
   function handleDisarm() {
-    chrome.runtime.sendMessage({ type: "DISARM" });
+    chrome.runtime.sendMessage({ type: "DISARM" }, (state) => {
+      if (state) renderState(state);
+    });
   }
   async function initPopup() {
     return new Promise((resolve) => {
@@ -59,6 +65,10 @@
         document.getElementById("activate-btn")?.addEventListener("click", handleActivate);
         document.getElementById("confirm-btn")?.addEventListener("click", handleConfirm);
         document.getElementById("disarm-btn")?.addEventListener("click", handleDisarm);
+        document.getElementById("sidepanel-btn")?.addEventListener("click", () => {
+          chrome.runtime.sendMessage({ type: "OPEN_SIDE_PANEL" });
+          window.close();
+        });
         resolve();
       });
     });

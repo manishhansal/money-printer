@@ -20,7 +20,8 @@ export type BswMessage =
   | { type: 'GET_STATE' }
   | { type: 'REQUEST_ARM' }
   | { type: 'CONFIRM_ARM' }
-  | { type: 'DISARM' };
+  | { type: 'DISARM' }
+  | { type: 'OPEN_SIDE_PANEL' };
 
 /** Runtime chrome shim — defined globally by the browser extension environment. */
 declare const chrome: {
@@ -135,7 +136,9 @@ export function renderState(state: PopupState): void {
  * The Confirm step is still required before ARMED is reached.
  */
 export function handleActivate(): void {
-  chrome.runtime.sendMessage({ type: 'REQUEST_ARM' });
+  chrome.runtime.sendMessage<PopupState>({ type: 'REQUEST_ARM' }, (state) => {
+    if (state) renderState(state);
+  });
 }
 
 /**
@@ -143,7 +146,9 @@ export function handleActivate(): void {
  * Sends 'CONFIRM_ARM' to the BSW → transitions engine from ARMED_PENDING to ARMED.
  */
 export function handleConfirm(): void {
-  chrome.runtime.sendMessage({ type: 'CONFIRM_ARM' });
+  chrome.runtime.sendMessage<PopupState>({ type: 'CONFIRM_ARM' }, (state) => {
+    if (state) renderState(state);
+  });
 }
 
 /**
@@ -151,7 +156,9 @@ export function handleConfirm(): void {
  * Sends 'DISARM' to the BSW → transitions engine back to DISARMED from any state.
  */
 export function handleDisarm(): void {
-  chrome.runtime.sendMessage({ type: 'DISARM' });
+  chrome.runtime.sendMessage<PopupState>({ type: 'DISARM' }, (state) => {
+    if (state) renderState(state);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -170,6 +177,10 @@ export async function initPopup(): Promise<void> {
       document.getElementById('activate-btn')?.addEventListener('click', handleActivate);
       document.getElementById('confirm-btn')?.addEventListener('click', handleConfirm);
       document.getElementById('disarm-btn')?.addEventListener('click', handleDisarm);
+      document.getElementById('sidepanel-btn')?.addEventListener('click', () => {
+        chrome.runtime.sendMessage({ type: 'OPEN_SIDE_PANEL' });
+        window.close(); // close popup after opening side panel
+      });
 
       resolve();
     });

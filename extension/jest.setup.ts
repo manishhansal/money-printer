@@ -24,6 +24,14 @@
     onStartup: { addListener: jest.fn() },
     onMessage: { addListener: jest.fn() },
   },
+  tabs: {
+    query: jest.fn((_opts: unknown, cb: (tabs: { windowId: number }[]) => void) =>
+      cb([{ windowId: 1 }]),
+    ),
+  },
+  sidePanel: {
+    open: jest.fn().mockResolvedValue(undefined),
+  },
 };
 
 // ─── Minimal WebSocket mock ────────────────────────────────────────────────────

@@ -196,7 +196,6 @@ chrome.runtime.onMessage.addListener(
           sendResponse({ ...currentState, ...pnl });
         })
         .catch(() => {
-          // Network unavailable — return cached state with zero P&L.
           sendResponse({
             ...currentState,
             sessionPnl: 0,
@@ -204,7 +203,46 @@ chrome.runtime.onMessage.addListener(
             healthStatus: 'Down' as const,
           });
         });
-      return true; // Keep the message channel open for the async response.
+      return true;
+    }
+
+    if (message.type === 'REQUEST_ARM') {
+      // Step 1 of two-step arm: DISARMED → ARMED_PENDING
+      updateState({ armedState: 'ARMED_PENDING' })
+        .then(() => sendResponse({ ...currentState }))
+        .catch(() => sendResponse({ ...currentState }));
+      return true;
+    }
+
+    if (message.type === 'CONFIRM_ARM') {
+      // Step 2: ARMED_PENDING → ARMED
+      updateState({ armedState: 'ARMED' })
+        .then(() => sendResponse({ ...currentState }))
+        .catch(() => sendResponse({ ...currentState }));
+      return true;
+    }
+
+    if (message.type === 'DISARM') {
+      // Reset to safe state from any armed state
+      updateState({ armedState: 'DISARMED' })
+        .then(() => sendResponse({ ...currentState }))
+        .catch(() => sendResponse({ ...currentState }));
+      return true;
+    }
+
+    if (message.type === 'OPEN_SIDE_PANEL') {
+      // Open the side panel for the current window
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]?.windowId) {
+          (chrome.sidePanel as unknown as { open: (opts: { windowId: number }) => Promise<void> })
+            .open({ windowId: tabs[0].windowId })
+            .then(() => sendResponse({ ok: true }))
+            .catch(() => sendResponse({ ok: false }));
+        } else {
+          sendResponse({ ok: false });
+        }
+      });
+      return true;
     }
   },
 );

@@ -139,6 +139,28 @@
         });
         return true;
       }
+      if (message.type === "REQUEST_ARM") {
+        updateState({ armedState: "ARMED_PENDING" }).then(() => sendResponse({ ...currentState })).catch(() => sendResponse({ ...currentState }));
+        return true;
+      }
+      if (message.type === "CONFIRM_ARM") {
+        updateState({ armedState: "ARMED" }).then(() => sendResponse({ ...currentState })).catch(() => sendResponse({ ...currentState }));
+        return true;
+      }
+      if (message.type === "DISARM") {
+        updateState({ armedState: "DISARMED" }).then(() => sendResponse({ ...currentState })).catch(() => sendResponse({ ...currentState }));
+        return true;
+      }
+      if (message.type === "OPEN_SIDE_PANEL") {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (tabs[0]?.windowId) {
+            chrome.sidePanel.open({ windowId: tabs[0].windowId }).then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
+          } else {
+            sendResponse({ ok: false });
+          }
+        });
+        return true;
+      }
     }
   );
   async function fetchSessionPnl() {
