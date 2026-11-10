@@ -55,6 +55,26 @@ export class OptionsIntelligenceService {
   // ─────────────────────────────────────────────────────────────────────────
 
   /**
+   * Fetch all active expiry dates for a given underlying instrument.
+   *
+   * Maps to POST /v2/optionchain/expirylist.
+   * Callers (e.g. InstrumentDiscoveryService, OptionsFlowService) use this to
+   * determine which expiries are available before fetching the full chain.
+   *
+   * @param underlyingScrip  Security ID of the underlying (integer).
+   * @param segment          Exchange segment (default 'IDX_I' for index options).
+   * @returns                Array of expiry dates in YYYY-MM-DD format, nearest first.
+   */
+  async getActiveExpiries(
+    underlyingScrip: number,
+    segment?: string,
+  ): Promise<string[]> {
+    const seg = segment ?? this.configService.get<string>('UNDERLYING_SEGMENT') ?? 'IDX_I';
+    const response = await this.dhanApiClient.getOptionExpiryList(underlyingScrip, seg);
+    return response.data;
+  }
+
+  /**
    * Fetches the full option chain for the given underlying and expiry,
    * parses Delta, Gamma, Theta, and Vega from every CE and PE leg,
    * writes the results into the in-memory cache, and returns the newly

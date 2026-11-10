@@ -16,6 +16,7 @@
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { ConfigService } from '@nestjs/config';
 
 import { Position } from '../../database/entities/positions.entity';
 import { Instruments } from '../../database/entities/instruments.entity';
@@ -49,6 +50,9 @@ const mockDhanApiClient = {
   placeOrder: jest.fn(),
   getOrderbook: jest.fn(),
   cancelOrder: jest.fn(),
+  setPnlExit: jest.fn().mockResolvedValue({ pnlExitStatus: 'ACTIVE', message: 'ok' }),
+  deletePnlExit: jest.fn().mockResolvedValue({ pnlExitStatus: 'DISABLED', message: 'ok' }),
+  setKillSwitch: jest.fn().mockResolvedValue({ dhanClientId: 'test', killSwitchStatus: 'ACTIVATE' }),
 };
 
 const mockTradeJournalService = {
@@ -158,6 +162,7 @@ describe('LiveTradingService', () => {
         { provide: NotificationService, useValue: mockNotificationService },
         { provide: SecretsService, useValue: mockSecretsService },
         { provide: RedisService, useValue: mockRedisService },
+        { provide: ConfigService, useValue: { get: jest.fn((key: string, def: unknown) => def) } },
       ],
     }).compile();
 
