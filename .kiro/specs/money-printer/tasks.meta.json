@@ -1,0 +1,2128 @@
+{
+  "pbtResults": {
+    "8.6 Write property test for liquidity score range invariant": {
+      "status": "passed",
+      "lastRunTimestamp": 1794254979514
+    },
+    "16.5 Write property test for position sizing formula correctness": {
+      "status": "passed",
+      "lastRunTimestamp": 1794255487117
+    },
+    "16.6 Write property test for invalid signal parameters cause RiskEngine rejection": {
+      "status": "passed",
+      "lastRunTimestamp": 1794255492898
+    },
+    "11.7 Write property test for IV regime classification correctness": {
+      "status": "passed",
+      "lastRunTimestamp": 1794255814936
+    },
+    "16.7 Write property test for VIX position size round-trip": {
+      "status": "passed",
+      "lastRunTimestamp": 1794255844201
+    },
+    "16.8 Write property test for two-loss daily lockout state machine": {
+      "status": "passed",
+      "lastRunTimestamp": 1794255988958
+    },
+    "11.8 Write property test for Theta decay non-negative invariant": {
+      "status": "passed",
+      "lastRunTimestamp": 1794298028184
+    }
+  },
+  "executionHistory": {
+    "1.1 Initialize NestJS monorepo with TypeScript strict mode, path aliases, ESLint, Prettier, and Jest configured with `fast-check` (minimum 100 iterations per property test)": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285246
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249299660
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794250270860
+      }
+    ],
+    "1.2 Set up TypeORM with PostgreSQL driver, UUID primary key defaults, migration framework, and Docker Compose for local development (PostgreSQL 15, Redis 7)": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285311
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249305799
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794250277112
+      }
+    ],
+    "1.3 Set up `ioredis` client with connection management, health-check utility, and reconnection handling; configure Redis pub/sub client (separate from command client)": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285341
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249311333
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794250281584
+      }
+    ],
+    "2.1 Implement `UserSettings`, `BrokerAccounts`, `BrokerSessions`, and `Instruments` TypeORM entities with field-level AES-256-GCM encryption transformer stubs on `ENCRYPTED` columns": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285375
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794250290278
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794250785665
+      }
+    ],
+    "2.2 Implement `MarketSnapshots`, `HistoricalCandles`, and `OptionChainSnapshots` entities with defined indexes": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285401
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794250295601
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794250792065
+      }
+    ],
+    "2.3 Implement `MarketRegimes`, `Strategies`, `StrategyVersions`, `Signals`, and `SignalEvaluations` entities": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285436
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794250303834
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794250798032
+      }
+    ],
+    "3.1 Implement `Orders`, `Executions`, `Positions`, and `Trades` entities": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285460
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794250307919
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794250803709
+      }
+    ],
+    "3.2 Implement `CapitalLedgers`, `RiskEvents`, `DailyTradingSummaries`, `StrategyPerformance`, `ModelVersions`, and `ModelEvaluations` entities": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285495
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794250314947
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794250812497
+      }
+    ],
+    "3.3 Implement `SystemHealthEvents` and `AuditLogs` entities with encrypted `previous_value` and `new_value` columns": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285518
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794250320060
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794251746726
+      }
+    ],
+    "4.1 Implement `AuthModule` with `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, and `GET /auth/status` endpoints using RS256 JWTs with configurable max validity of 30 minutes": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285544
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794250836709
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794251753453
+      }
+    ],
+    "4.2 Implement `SecretsService` wrapping HashiCorp Vault or AWS Secrets Manager with `get`, `set`, and `rotate` methods; no secret value may appear in application logs or API responses": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285566
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794250844174
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794251760952
+      }
+    ],
+    "4.3 Implement AES-256-GCM TypeORM column transformer (`EncryptedColumnTransformer`) and apply it to all `ENCRYPTED` columns in `BrokerAccounts`, `BrokerSessions`, and `AuditLogs`": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285589
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794251795473
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794251915812
+      }
+    ],
+    "4.4 Implement per-endpoint rate-limiting guard (default 100 req/min per authenticated client) returning HTTP 429 with a `Retry-After` header as a strictly positive integer; implement CSRF token middleware on all state-modifying endpoints": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285611
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794251923825
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794252484055
+      }
+    ],
+    "5.1 Implement `DhanApiClient` with typed methods for all endpoint categories: authentication, live quotes, historical candles, option chains, order placement, order modification, order cancellation, positions, portfolio, tradebook, orderbook, live order updates, and Super Orders": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285633
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794251932527
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794252491608
+      }
+    ],
+    "5.2 Implement Dhan WebSocket client in `DhanApiClient` with exponential backoff reconnection (1 s → 2 s → 4 s → 8 s → 16 s capped at 30 s, 5 consecutive attempts); validate first-tick SLA ≤ 3 seconds after connection confirmation": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285664
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794252524025
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794253165452
+      }
+    ],
+    "5.3 Implement rate-limit request queue in `DhanApiClient`: buffer up to 50 pending requests; retry after `Retry-After` window; return `rate-limit-queue-full` error to caller when queue is at capacity without adding the request": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285686
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794253243691
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794253318269
+      }
+    ],
+    "6.1 Implement `MarketDataModule`: manage the Dhan WebSocket feed subscription; publish incoming ticks to Redis pub/sub channel `events:tick:{instrument_id}`; publish `connectivity-failure` alert via `NotificationService` within 5 seconds after all 5 reconnection attempts fail": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285707
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794253696342
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794254035813
+      }
+    ],
+    "6.2 Implement Redis cache write path in `MarketDataModule`: write `mkt:snapshot:{instrument_id}` (TTL 2 s), `mkt:optchain:{underlying}:{expiry}` (TTL 10 s), `regime:current` (TTL 300 s), `signal:score:{signal_id}` (TTL 60 s)": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285727
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794253707359
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794254044634
+      }
+    ],
+    "6.3 Implement feed-staleness detector: when market data age exceeds `max_allowed_data_age` → block new order submissions and notify `RiskEngine` via NestJS event; publish staleness alert to `NotificationService`": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285747
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794253714502
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794254051964
+      }
+    ],
+    "7. Checkpoint — core platform complete": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285767
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794253415285
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794253495251
+      }
+    ],
+    "8.1 Implement `InstrumentDiscoveryModule`: scan all eligible NSE F&O instruments at 09:15 IST; classify each as `UNDERLYING` or `TRADABLE_OPTION`; persist results to `Instruments` table; ensure underlying indices are never submitted to `ExecutionService`": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285788
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794254108918
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794254654916
+      }
+    ],
+    "8.2 Implement composite liquidity score computation (0–100) using volume vs. 30-day average (25%), open interest (25%), bid-ask spread inverted (20%), market depth sum of top-5 levels (15%), and quantity at best bid + best ask (15%)": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285808
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794254710671
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794255516128
+      }
+    ],
+    "8.3 Implement subscription quota rotation: when active subscriptions reach 90% of configured Dhan WebSocket limit → drop lowest-scored instruments until below 80%; update liquidity rankings every ≤ 5 minutes during market hours; remove instruments below configured minimum score from the active universe and unsubscribe their feeds": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285834
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794255574576
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794256015719
+      }
+    ],
+    "8.4 Implement scan failure fallback: if scan does not complete within 5 minutes of market open → retain prior session's instrument universe, emit `SCAN_FAILURE` to `NotificationService`, record in `SystemHealthEvents`": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285861
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794256080640
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794297779309
+      }
+    ],
+    "8.5 Enforce global OI and ADV eligibility invariants: no F&O stock option admitted to the trading universe unless both the configured minimum OI threshold and minimum ADV threshold are satisfied; apply uniformly on every scan": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285881
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794256088653
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794298051966
+      }
+    ],
+    "9.1 Implement `MarketRegimeModule`: classify the market into exactly one of 10 regimes at intervals ≤ 60 seconds using all 10 input indicators; evaluate the VIX override rule (VIX > `high_volatility_threshold` → `HIGH_VOL`) before any other classification logic; publish regime-change events to `events:regime_change` Redis channel within 30 seconds of the triggering condition": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285901
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794254130839
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794254669074
+      }
+    ],
+    "9.2 Persist every classification to `MarketRegimes` table with timestamp, all 10 input values, and classification rationale; when regime is `UNSTABLE`, notify `RiskEngine` to apply the unstable-regime concurrent-trade limit via NestJS event": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285921
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794254724518
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794255527350
+      }
+    ],
+    "10.1 Implement `TechnicalAnalysisModule`: compute VWAP, ATR (configurable period), EMA (9, 21, 50, 200), support/resistance levels, ORB range (first 15-minute session high/low), MACD, RSI (14), and relative volume on demand from `HistoricalCandles` and current ticks; no persistent state — all values recomputed from source data": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285942
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794254138635
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794254682162
+      }
+    ],
+    "11.1 Implement `OptionsIntelligenceModule`: compute Delta, Gamma, Theta, and Vega for all candidate options contracts using live option chain data; reject any Greek values older than 60 seconds": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285963
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794254146083
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794254692858
+      }
+    ],
+    "11.2 Implement contract selection: enforce all 4 criteria simultaneously — Delta ∈ [configured_min_delta, configured_max_delta] (both in (0.01, 0.99)), IV rank ∈ [configured_min_iv_percentile, configured_max_iv_percentile] (1–100), OI ≥ configured minimum, and market depth qty at both best bid and best ask ≥ configured minimum": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249285984
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794254733966
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794255537036
+      }
+    ],
+    "11.3 Implement IV regime classification per underlying: `EXPANDING` when `current_iv > baseline_avg + threshold_pp`, `CONTRACTING` when `current_iv < baseline_avg − threshold_pp`, `NEUTRAL` otherwise; independently configurable weight factors for contract selection and R:R estimation": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286006
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794255585900
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794256027032
+      }
+    ],
+    "11.4 Implement expiry-day special controls: when `trading_date = expiry_date` → apply higher signal score threshold (standard + configurable delta), reduce max position size to configured percentage (10%–90% of standard), and set mandatory square-off time to configured value (12:00–14:30 IST)": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286030
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794255610307
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794256040435
+      }
+    ],
+    "11.5 Implement Theta decay computation in ₹/calendar-day as a non-negative magnitude (≥ 0) for all open options positions; expose computed decay to `PositionMonitoringModule` as an exit condition input": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286053
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794256096319
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794298050620
+      }
+    ],
+    "11.6 Implement illiquid contract marking: when bid-ask spread > `configured_max_spread_threshold` → mark contract as illiquid; `SignalScoringModule` must receive the illiquid flag and apply the configured liquidity penalty to the Liquidity/Execution Feasibility score component": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286077
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794296896250
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794297780868
+      }
+    ],
+    "12. Checkpoint — data and intelligence layer complete": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286099
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794298093259
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794298137037
+      }
+    ],
+    "13.1 Implement `StrategyModule` with all 8 strategies (A–H) including full configuration schemas: entry/exit/invalidation conditions, `compatible_regimes` list, `min_rr_ratio` (1.0–10.0), `max_concurrent_positions` (1–20), and `opening_phase_compatible` flag": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286123
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794298149059
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794298697762
+      }
+    ],
+    "13.2 Implement sequential gate evaluation for each signal candidate: (1) check regime availability → skip all, record `\"regime unavailable\"`; (2) check regime compatibility → skip, record `\"incompatible regime\"`; (3) apply entry conditions; (4) compute R:R → skip if below `min_rr_ratio`; (5) generate signal and forward to `SignalScoringModule`; record every evaluation outcome in `SignalEvaluations`": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286147
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794298151034
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794299228341
+      }
+    ],
+    "13.3 Implement Adaptive StrategyEngine: rank strategy priority by validated out-of-sample win rate for the current regime over trailing 20 trading days; suspend strategies below configured `min_performance_threshold` and publish a `strategy-degradation` alert; re-enable only on explicit user action; record selection rationale in `StrategyPerformance`": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286169
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794298156046
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794299629210
+      }
+    ],
+    "14.1 Implement `SignalScoringModule`: compute composite score as the arithmetic sum of all 8 component scores (max 100); enforce R:R Quality component = 0 when the signal R:R ratio is strictly less than the originating strategy's `min_rr_ratio`; reject signals with composite score < 80 for live trading with status `\"rejected\"` and reason `\"score below threshold\"`": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286197
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794298152722
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794298705600
+      }
+    ],
+    "14.2 Persist every signal to `Signals` table with all enumerated fields; mark signals with status `\"expired\"` when `max_validity_duration` is exceeded; when entry price deviates from current market price by more than the configured strategy-specific threshold before order submission → recompute composite score and re-validate against the 80-point threshold": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286220
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794298154442
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794299230211
+      }
+    ],
+    "14.3 Implement Opportunity Intelligence Ranking: order all active signals by composite score, estimated expected value, and regime alignment strength; generate a natural-language explanation for each signal's ranking position": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286242
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794299634299
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794299934589
+      }
+    ],
+    "15.1 Implement `PortfolioModule`: maintain authoritative in-memory portfolio state (open positions + pending orders) with PostgreSQL persistence; compute `Dynamic_Capital = starting_capital + SUM(realized_net_pnl for all closed trades)` where each `realized_net_pnl = gross_pnl − (brokerage + STT + exchange_charges + GST + SEBI_charges + stamp_duty)`": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286264
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794254155185
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794254702274
+      }
+    ],
+    "15.2 Implement `CapitalLedger` write path: after each trade closes → write `CapitalLedgers` record and recompute `Dynamic_Capital` within 500 ms; if the write or recomputation fails → immediately halt all new signal evaluations, retain last committed balance, record error in `SystemHealthEvents` within 1 second": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286298
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794254750763
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794255549234
+      }
+    ],
+    "16.1 Implement `RiskManagementModule` as the authoritative risk gatekeeper: position sizing formula `quantity = FLOOR(Dynamic_Capital × configured_risk_percentage / (|entry_price − stop_loss_price| × lot_size))`; enforce all 8 pre-entry gates (per-trade loss, total exposure, correlated exposure, concurrent trades, concentration, signal score ≥ 80, non-zero per-unit risk, valid lot_size); return the specific failing gate name on rejection": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286328
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794254770294
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794255561897
+      }
+    ],
+    "16.2 Implement the daily loss state machine: `Normal` → `TWO_LOSS_LOCKOUT` (2nd losing trade closed) → `EMERGENCY_HALT` (intraday net loss ≥ daily limit including unrealized); `KILL_SWITCH_ACTIVE` from any state; each transition records a `RiskEvents` entry; both `TWO_LOSS_LOCKOUT` and `EMERGENCY_HALT` reset at next calendar day 00:00 IST; notify `NotificationService` on each transition": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286357
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794255597839
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794256051997
+      }
+    ],
+    "16.3 Implement VIX position size controls: reduce max position size to `volatility_protection_limit` when VIX > `unusual_volatility_threshold`; restore to normal configured limit after VIX has been continuously below the threshold for 5 consecutive minutes": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286381
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794255620039
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794256059429
+      }
+    ],
+    "16.4 Implement zero-risk and invalid lot_size rejection: when `|entry_price − stop_loss_price| = 0` → reject and record `RiskEvent` with reason `\"zero per-unit risk\"`; when `lot_size ≤ 0` or not configured → reject and record `RiskEvent` with reason `\"invalid lot_size configuration\"`": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286410
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794256116205
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794296895610
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794297782269
+      }
+    ],
+    "17. Checkpoint — strategy, signal, and risk layer complete": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286431
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794299989923
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794300061678
+      }
+    ],
+    "18.1 Implement `ExecutionModule`: full order lifecycle management (place, modify, cancel via `DhanApiClient`); execute the 5-check pre-trade validation chain in order — (1) composite score ≥ 80, (2) `RiskEngine` approval, (3) available margin ≥ required margin, (4) no duplicate order for same instrument + direction, (5) current time within session and before mandatory square-off; reject without broker submission on any check failure and return the specific failing check name": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286452
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794300069534
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794300893210
+      }
+    ],
+    "18.2 Implement order idempotency: assign a UUID idempotency key to each order; store in Redis key `orders:idempotency:{key}` with 5-minute TTL; before every Dhan API submission check Redis for the key; if key exists → return `duplicate-order-rejected` without Dhan API call": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286474
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794300901060
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794301319637
+      }
+    ],
+    "19.1 Implement `PaperTradingModule` with complete isolation from `LiveEngine`: dedicated `paper_*` PostgreSQL tables (via separate TypeORM entities), `paper:*` Redis key namespace, and `events:paper:*` event channels; no shared service instances, message handlers, or middleware": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286497
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794300076178
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794300894209
+      }
+    ],
+    "19.2 Implement fill simulation: buy orders fill at current best ask, sell orders fill at current best bid; if best bid or best ask is unavailable → reject order, preserve existing portfolio state and P&L, and record rejection reason `\"market data unavailable\"`": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286518
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794300909814
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794301320661
+      }
+    ],
+    "19.3 Implement configurable simulation parameters: slippage models (fixed rupee 0.00–50.00₹, percentage 0.00%–2.00%, market-impact); rejection probability (0.00–1.00, default 0.00) — rejected orders deduct no costs and record no P&L change; execution latency distribution (uniform/normal/log-normal, mean 10–5000 ms, default: uniform 200 ms); zero-latency instantaneous fills are not the default": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286543
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794301379842
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794301918844
+      }
+    ],
+    "19.4 Apply identical cost formulas as `LiveEngine`: brokerage, STT, NSE exchange charges, GST, SEBI charges, and stamp duty deducted from every simulated fill": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286566
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794301390171
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794301919571
+      }
+    ],
+    "20.1 Implement `SessionManagerModule`: track all 8 NSE session phases with their IST time boundaries; publish `session-phase-change` events to `events:session_phase` Redis channel; set `session:phase:current` Redis key on every transition; during Opening Volatility phase → restrict `StrategyEngine` to strategies with `opening_phase_compatible = true`": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286588
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794251938636
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794252499609
+      }
+    ],
+    "20.2 Implement session-critical enforcement: at 14:30 IST → `LiveEngine` blocks all new position entries; at 15:15 IST → `LiveEngine` submits market exit orders for all open positions and records a `mandatory-exit` compliance event in `TradeJournal` with exit timestamp and all affected position IDs; alert user if any square-off market exit order is rejected or unconfirmed within 5 minutes of 15:15 IST": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286617
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794252536112
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794253174091
+      }
+    ],
+    "21.1 Implement `LiveTradingModule` two-step arming state machine: `DISARMED` → `ARMED_PENDING` (user clicks \"Activate Live Mode\") → `ARMED` (user clicks \"Confirm Arm\"); a single user action must never reach `ARMED`; persist armed state to Redis key `trading:armed_state`; auto-revert to `DISARMED` on CloudEngine restart, browser update, or Dhan session token renewal": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286641
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794300911623
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794301322096
+      }
+    ],
+    "21.2 Implement session-aware entry blocking: reject new entry orders when in Closing phase (current time ≥ 14:30 IST), when `TWO_LOSS_LOCKOUT` is active, or when `EMERGENCY_HALT` is active — without forwarding to the broker": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286662
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794301362978
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794301371858
+      }
+    ],
+    "21.3 Implement kill switch: on activation → cancel all open orders and submit market exit orders for all open positions within 10 seconds; if any orders or positions remain open after 10 seconds → publish a MAX-priority alert to `NotificationService` identifying specific items requiring manual intervention; record `KILL_SWITCH` event in `RiskEvents`": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286684
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794301391596
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794301921213
+      }
+    ],
+    "22. Checkpoint — execution engines complete": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286706
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794304000433
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794304058610
+      }
+    ],
+    "23.1 Implement `TrailingStopModule` with all 8 trailing stop mechanisms: ATR-based, Swing High/Low, Chandelier Exit, Percentage-based, Volatility-adjusted (ATR + IV regime multiplier), Structure-based (anchored to nearest S/R level), Time-based (progressively tightening), and Partial-profit (exit configured qty at first target, move SL to post-partial level)": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286728
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794301393430
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794301922391
+      }
+    ],
+    "23.2 Implement SL monotonicity enforcement: before persisting any SL update, atomically apply conditional write — long positions: new SL ≥ current SL; short positions: new SL ≤ current SL; never move SL in a direction that increases risk": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286752
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794301941158
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794302079113
+      }
+    ],
+    "23.3 Implement broker-side SL registration via Dhan Super Orders within 5 seconds of trailing stop activation; maintain an internal SL level independent of broker state; if no Super Order confirmation received for any open position → treat broker-side SL as inactive and submit a replacement SL order": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286773
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794302091668
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794302738547
+      }
+    ],
+    "23.4 Implement SL rejection escalation ladder: 1–2 consecutive rejections → submit replacement SL within 5 s and publish CRITICAL alert; ≥ 3 consecutive rejections → publish MAX-priority alert to `NotificationService` and disable new entries pending user acknowledgment; on user ACK → reset consecutive rejection counter for that position to exactly 0": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286798
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794302102578
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794302740126
+      }
+    ],
+    "24.1 Implement `PositionMonitoringModule`: subscribe to `events:tick:{instrument_id}` for every open position; continuously update MFE (maximum favorable excursion) and MAE (maximum adverse excursion) from entry price; evaluate exit conditions — SL hit, target hit, trailing stop trigger, time-based exit, and Theta decay threshold; feed real-time unrealized P&L to `RiskEngine` for `EMERGENCY_HALT` monitoring; detect expiry-day mandatory square-off time and trigger square-off for expiring positions": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286824
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794302104897
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794303164391
+      }
+    ],
+    "25.1 Implement `TradeJournalModule` with append-only write semantics across all 9 record sets: signals, rejected_signals, orders, fills, positions, completed_trades, risk_events, system_errors, and configuration_changes; only INSERT operations are issued — no UPDATE or DELETE": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286846
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794250852797
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794251772325
+      }
+    ],
+    "25.2 Implement write SLA enforcement and retry: most records within 5 seconds of triggering event; risk_events and system_errors within 1 second; retry up to 3 times within 30 seconds on write failure; emit operator alert identifying record type and failure reason on all-retry failure; records are never silently dropped": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286868
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794251944673
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794252508220
+      }
+    ],
+    "25.3 Implement trade completion record writer: persist all required fields (`trade_id`, `instrument`, `strategy`, `signal_score`, `entry_price`, `exit_price`, `quantity`, `entry_time`, `exit_time`, `MFE`, `MAE`, `gross_pnl`, per-component charges, `net_pnl`, `exit_reason`, `execution_slippage`, `dhan_entry_order_id`, `dhan_exit_order_id`)": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286891
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794252545196
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794253184303
+      }
+    ],
+    "25.4 Implement configuration-change audit record writer: persist user ID, timestamp, field name, previous value, and new value in `AuditLogs` table for every user-initiated config change": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286916
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794304068030
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794305901445
+      }
+    ],
+    "26.1 Implement `NotificationModule` with a priority queue (MAX > CRITICAL > WARNING > INFO); deliver alerts to Chrome Extension via WebSocket push; buffer undelivered alerts and retry — no alert is silently dropped; track acknowledgment status for MAX-priority alerts (required by `TrailingStopEngine` SL escalation and kill switch)": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286955
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794250860346
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794251779047
+      }
+    ],
+    "27. Checkpoint — position management and record-keeping complete": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286977
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794304067527
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794305901389
+      }
+    ],
+    "28.1 Implement `AnalyticsModule`: compute all 12 performance metrics (`win_rate`, `profit_factor`, `expectancy`, `avg_win`, `avg_loss`, `rr_ratio`, `max_drawdown`, `sharpe_ratio`, `sortino_ratio`, `calmar_ratio`, `max_consecutive_wins`, `max_consecutive_losses`) separately for LIVE and PAPER engines across three time windows (current session, last 30 days, all-time); suppress `sharpe_ratio`, `sortino_ratio`, `calmar_ratio`, and `profit_factor` with message `\"insufficient data — fewer than 30 trades\"` when trade count < 30": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249286998
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794303543059
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794303955459
+      }
+    ],
+    "28.2 Implement performance attribution breakdowns: by strategy, by instrument, by market regime, and by 60-minute time-of-day bucket": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249287021
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794304068719
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794305901471
+      }
+    ],
+    "28.3 Implement Trade Quality Forensics: compute `QCR = actual_net_pnl / MFE`; classify exit as `premature` (QCR < 0.70), `near-optimal` (QCR ≥ 0.70 and `exit_time ≤ mfe_time`), or `late` (QCR ≥ 0.70 and `exit_time > mfe_time`); rate execution quality as `Poor` (QCR < 0.40), `Fair` (0.40 ≤ QCR < 0.70), `Good` (0.70 ≤ QCR < 0.90), `Excellent` (QCR ≥ 0.90); when `MFE = 0` → record QCR as `NULL` and execution quality as `\"No Favorable Excursion\"` without performing division": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249287044
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794304071592
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794305901521
+      }
+    ],
+    "28.4 Implement Daily Trading Intelligence Report (generated at session end): trade summary, regime observations, strategy performance, capital changes, and for each generated-but-not-executed signal the specific threshold criterion not met; when no trades were placed → generate a No-Trade Intelligence entry documenting all evaluated signals with their scores": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249287072
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794304072867
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794305980696
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794306461149
+      }
+    ],
+    "28.5 Implement Capital Compounding Simulator: project capital growth over 1, 3, or 5 years with configurable compounding frequency (daily, weekly, monthly) and configurable withdrawal rate (0%–100% in 1% increments) based on historical performance statistics from the selected time window": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249287094
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794305990952
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794306462541
+      }
+    ],
+    "28.6 Implement Market Activity Heatmap: track count of valid trade signals by instrument, 60-minute time-of-day bucket, and market regime over the trailing 30 trading days": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249287116
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794305991188
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794306463424
+      }
+    ],
+    "29.1 Implement `ComplianceModule`: enforce all 4 live deployment profitability gates — (1) positive out-of-sample expectancy, (2) maximum drawdown ≤ configured threshold, (3) ≥ 30 closed trades per regime tested, (4) Monte Carlo robustness with ≥ 1,000 iterations of which ≥ 95% yield positive out-of-sample expectancy; block strategy from live trading and persist specific failing criterion name and computed value to `Strategies` table on any gate failure": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249287139
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794303198124
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794303510076
+      }
+    ],
+    "29.2 Implement `BacktestEngine`: walk-forward validation and out-of-sample testing for all 8 strategies; no look-ahead bias (indicator values at any step use only historically available data) and no survivorship bias (include delisted instruments in historical universe); configurable in-sample/out-of-sample split ratio (50%–90% in-sample); apply identical cost model as `PaperEngine`; compute 95% confidence intervals for expectancy, win rate, and max drawdown via bootstrap resampling (≥ 1,000 resamples)": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249287161
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794303531812
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794303956416
+      }
+    ],
+    "30.1 Implement `ReconciliationModule`: EOD reconciliation (triggered at 15:30 IST, complete within 30 minutes) comparing CloudEngine orders, executions, positions, and P&L against Dhan broker records; reconnection reconciliation (complete within 30 seconds of DhanAPI reconnection); SL status verification (complete within 60 seconds of `TrailingStopEngine` request after reconnect); on any discrepancy → halt new order submissions while permitting modification and cancellation of existing orders, publish alert, and await user ACK or auto-agreement": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249287183
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794302107192
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794302742678
+      }
+    ],
+    "30.2 Implement reconciliation report and alerts: confirm CloudEngine net P&L = Dhan broker net P&L = `CapitalLedger` closing balance within ₹1 tolerance; when Dhan reports a fill with no matching CloudEngine order ID → flag as unrecognized execution and publish alert to `NotificationService` within 10 seconds; if reconnection reconciliation fails to complete within 30 seconds → halt all new order submissions and publish reconciliation timeout alert; record every run, discrepancy, and resolution action in `AuditLogs`": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249287208
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794303186723
+      },
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794303508396
+      }
+    ],
+    "31.1 Implement `SystemHealthMonitorModule`: track 6 metrics (CloudEngine module health, DhanAPI connectivity, PostgreSQL connection pool, Redis availability, WebSocket feed latency, live order execution latency); classify each as `Healthy`, `Degraded`, or `Down`; publish health status updates to `NotificationService` every 30 seconds; set `health:{module_name}` Redis key (TTL 90 s) on every 30-second poll; publish an immediate alert on any `Healthy → Degraded` or `Degraded → Down` transition independent of the 30-second poll interval": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249287230
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794305991454
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794306465948
+      }
+    ],
+    "31.2 Implement Options Flow Dashboard API endpoint: expose aggregate net OI change, put/call ratio, IV skew, and large-block single-trade detection (contract volume above configured threshold) for all monitored instruments; refresh every ≤ 60 seconds; display staleness indicator and suppress Options/Futures Confirmation score contributions when data age exceeds 60 seconds": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249287254
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794305992955
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794306467420
+      }
+    ],
+    "32. Checkpoint — analytics, compliance, and monitoring complete": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249287278
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794306476844
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794307029807
+      }
+    ],
+    "33.1 Implement MV3 Background Service Worker (BSW): maintain a single WSS connection to the CloudEngine; persist `{ armedState, sessionToken, connectionState }` in `chrome.storage.session` (ephemeral, not synced); on BSW startup → attempt to recover state within 5 seconds; if recovery fails → enter disarmed state and notify the user that manual re-authorization is required; never auto-re-arm after restart, token renewal, or browser update": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249287304
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794306482794
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794307031739
+      }
+    ],
+    "33.2 Implement Extension security invariants: never store broker credentials, API keys, or session tokens in extension local storage accessible to content scripts, `window.postMessage`, or any DOM-accessible location; all Extension ↔ CloudEngine communication over WSS or HTTPS exclusively": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249287328
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794306483284
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794307033137
+      }
+    ],
+    "34.1 Implement Popup: two-step ARM/DISARM UI (Activate → Confirm; single action cannot arm); display system health badge, quick session P&L summary, armed state label, active positions count": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249287351
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794306484691
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794307034393
+      }
+    ],
+    "34.2 Implement Side Panel: live position monitor with real-time P&L updates from CloudEngine WebSocket push; recent signal feed (last 10 signals); alert queue with acknowledgment for MAX-priority alerts": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249287376
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794306485651
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794307035388
+      }
+    ],
+    "34.3 Implement Full Dashboard: strategy performance analytics, capital chart, regime heatmap, Options Flow panel (OI change, PCR, IV skew, large-block activity); consume all CloudEngine WebSocket push notifications and display them in the alert queue": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249287400
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794307042736
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794307627957
+      }
+    ],
+    "35.1 Wire all Redis pub/sub channels: `MarketDataModule` → `TechnicalAnalysisModule`, `OptionsIntelligenceModule`, `PositionMonitoringModule` (via `events:tick:{id}`); `MarketRegimeModule` → `StrategyModule`, `RiskManagementModule`, `OptionsIntelligenceModule` (via `events:regime_change`); `SessionManagerModule` → `StrategyModule`, `RiskManagementModule`, `LiveTradingModule`, `OptionsIntelligenceModule` (via `events:session_phase`)": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249287424
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794307058424
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794307629732
+      }
+    ],
+    "35.2 Wire the signal-to-execution pipeline via NestJS EventEmitter: `StrategyModule` → `SignalScoringModule` → `RiskManagementModule` → `LiveTradingModule` → `ExecutionModule` → `TrailingStopModule` → `PositionMonitoringModule`; wire fill events from `ExecutionModule` to `TrailingStopModule` and `PositionMonitoringModule`; wire `PortfolioModule` → `RiskManagementModule` (Dynamic_Capital feed)": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249287450
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794307060236
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794307631154
+      }
+    ],
+    "35.3 Wire all modules to `TradeJournalModule` for append-only write paths; wire `SystemHealthMonitorModule` to watch all module NestJS global exception events; verify Redis pub/sub subscriptions for `PaperTradingModule` isolated channels (`events:paper:*`)": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249287481
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794307061218
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794307633691
+      }
+    ],
+    "36. Final checkpoint — all tests pass": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794249287505
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794307655483
+      },
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794307772098
+      }
+    ],
+    "1. Project setup and core infrastructure": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794250281612
+      }
+    ],
+    "2. Database schema — models 1–12": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794250798066
+      }
+    ],
+    "3. Database schema — models 13–24": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794251746763
+      }
+    ],
+    "26. NotificationService module": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794251779100
+      }
+    ],
+    "4. Auth, secrets, and security foundation": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794252484097
+      }
+    ],
+    "20. SessionManager module": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794253174136
+      }
+    ],
+    "5. Dhan API integration layer": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794253318319
+      }
+    ],
+    "5.4 Write unit tests for WebSocket reconnection backoff schedule (verify delays: 1s, 2s, 4s, 8s, 16s) and connectivity-failure alert timing (≤5 seconds after 5th failure)": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794253558442
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794253564363
+      }
+    ],
+    "4.5 Write unit tests for auth state transitions: login → token expiry → Extension disconnect → disarmed": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794253646858
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794253656412
+      }
+    ],
+    "4.6 Write property test for HTTP 429 Retry-After header": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794253663576
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794253669702
+      }
+    ],
+    "6. MarketData module": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794254051994
+      }
+    ],
+    "6.4 Write property test for Redis cache TTL compliance": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794254080415
+      },
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794254089958
+      }
+    ],
+    "10. TechnicalAnalysis module": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794254682201
+      }
+    ],
+    "9. MarketRegime module": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794255527450
+      }
+    ],
+    "15. Portfolio module (CapitalLedger and Dynamic_Capital)": [
+      {
+        "executionId": "43ba5782-cb42-4511-87d7-337dcc73dc1f",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794255549287
+      }
+    ],
+    "16. RiskManagement module (RiskEngine)": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794297782300
+      }
+    ],
+    "11. OptionsIntelligence module": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794298050710
+      }
+    ],
+    "8. InstrumentDiscovery module": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794298052014
+      }
+    ],
+    "13. Strategy module (StrategyEngine)": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794299629258
+      }
+    ],
+    "14. SignalScoring module (SignalScorer)": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794299934633
+      }
+    ],
+    "13.4 Write property test for strategy evaluation regime gate": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794299967966
+      }
+    ],
+    "14.4 Write property test for signal composite score is sum of components and in range": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794299976572
+      }
+    ],
+    "14.5 Write property test for R:R quality zero when R:R below strategy minimum": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794299977305
+      }
+    ],
+    "14.6 Write property test for score below threshold forces live trading rejection": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794299977751
+      }
+    ],
+    "11.7 Write property test for IV regime classification correctness": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794299978217
+      }
+    ],
+    "11.8 Write property test for Theta decay non-negative invariant": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794299978456
+      }
+    ],
+    "16.5 Write property test for position sizing formula correctness": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794299978936
+      }
+    ],
+    "16.6 Write property test for invalid signal parameters cause RiskEngine rejection": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794299979360
+      }
+    ],
+    "16.7 Write property test for VIX position size round-trip": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794299979801
+      }
+    ],
+    "16.8 Write property test for two-loss daily lockout state machine": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794299980306
+      }
+    ],
+    "8.6 Write property test for liquidity score range invariant": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794299980614
+      }
+    ],
+    "18. Execution module (ExecutionService)": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794301319723
+      }
+    ],
+    "18.3 Write property test for pre-trade validation chain gate": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794301361689
+      }
+    ],
+    "18.4 Write property test for idempotency deduplication within 5-minute window": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794301362130
+      }
+    ],
+    "19. PaperTrading module (PaperEngine)": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794301919628
+      }
+    ],
+    "21. LiveTrading module (LiveEngine)": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794301921249
+      }
+    ],
+    "19.5 Write property test for paper fill price correctness": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794301932240
+      }
+    ],
+    "19.6 Write property test for cost model parity across all engines": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794301932730
+      }
+    ],
+    "21.4 Write unit tests for the two-step arming state machine covering all valid and invalid transition sequences": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794301933373
+      }
+    ],
+    "21.5 Write property test for two-step arming invariant": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794301934010
+      }
+    ],
+    "21.6 Write property test for Closing phase blocks all new entries": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794301934512
+      }
+    ],
+    "23. TrailingStop module (TrailingStopEngine)": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794302740200
+      }
+    ],
+    "24. PositionMonitoring module (PositionMonitor)": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794303164476
+      }
+    ],
+    "23.5 Write property test for trailing stop SL monotonicity in profit direction": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794303174485
+      }
+    ],
+    "23.6 Write property test for SL rejection escalation ladder and counter reset": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794303174857
+      }
+    ],
+    "30.3 Write property test for reconciliation P&L agreement within tolerance": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794303175283
+      }
+    ],
+    "30. Reconciliation module (ReconciliationService)": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794303508445
+      }
+    ],
+    "29.3 Write property test for profitability gate blocks live deployment on any failure": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794303529614
+      }
+    ],
+    "29. Compliance and BacktestEngine module": [
+      {
+        "executionId": "c2d482e1-b999-44a9-b190-53cf81ab8507",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794303956468
+      }
+    ],
+    "25. TradeJournal module": [
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794305901547
+      }
+    ],
+    "8.7 Write property test for subscription rotation correctness": [
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794305961357
+      }
+    ],
+    "9.3 Write property test for VIX override forces HIGH_VOL regime": [
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794305961396
+      }
+    ],
+    "9.4 Write property test for regime classification as a total function over 10 valid codes": [
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794305961453
+      }
+    ],
+    "8.8 Write property test for eligibility threshold uniform enforcement": [
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794305961481
+      }
+    ],
+    "20.3 Write unit tests for all 8 session phase transitions at their IST boundaries": [
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794305961551
+      }
+    ],
+    "15.3 Write property test for CapitalLedger accounting identity": [
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794305961644
+      }
+    ],
+    "20.4 Write property test for session phase classification as a total exclusive function": [
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794305961702
+      }
+    ],
+    "28.8 Write property test for insufficient data suppresses ratio metrics": [
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794305961769
+      }
+    ],
+    "28.7 Write property test for analytics engine isolation (LIVE vs PAPER)": [
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794305961797
+      }
+    ],
+    "28.9 Write property test for QCR computation and exit classification": [
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794305961834
+      }
+    ],
+    "33.3 Write unit tests for BSW state recovery: confirm successful recovery within 5 seconds and confirm disarm + user notification when recovery times out": [
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794305962408
+      }
+    ],
+    "35.4 Write integration test for the full signal-to-execution pipeline: strategy evaluation → signal scoring → risk gating → live order submission → trailing stop activation → position monitoring fill": [
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794305962857
+      }
+    ],
+    "35.5 Write integration test for Paper/Live engine isolation: confirm zero shared PostgreSQL tables, Redis keys, and event bus channels between `PaperEngine` and `LiveEngine`": [
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794305963417
+      }
+    ],
+    "35.6 Write integration test for EOD reconciliation flow: 15:30 IST trigger → position and order comparison → discrepancy detection → new order submission halt → AuditLogs write": [
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794305963787
+      }
+    ],
+    "28. Analytics module (AnalyticsService)": [
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794306463456
+      }
+    ],
+    "31. SystemHealthMonitor and Options Flow Dashboard": [
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794306467451
+      }
+    ],
+    "33. Chrome Extension — Background Service Worker and storage": [
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794307033177
+      }
+    ],
+    "34. Chrome Extension — UI components": [
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794307628047
+      }
+    ],
+    "35. Integration wiring — CloudEngine event pipeline": [
+      {
+        "executionId": "79bcf26d-b52c-4496-8960-74ef9ab353b8",
+        "chatSessionId": "sess_f91f1431-54ad-4efe-a12e-a42b7239fb7b",
+        "timestamp": 1794307633730
+      }
+    ]
+  }
+}
