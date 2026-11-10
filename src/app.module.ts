@@ -1,4 +1,4 @@
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
@@ -170,6 +170,16 @@ export class AppModule implements NestModule {
    * Requirement 16.5
    */
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(CsrfMiddleware).forRoutes('*');
+    consumer
+      .apply(CsrfMiddleware)
+      // Exclude endpoints consumed by the Chrome Extension popup that runs
+      // in a service-worker context without cookie access.
+      // Both are CORS-restricted to chrome-extension://* and localhost origins.
+      .exclude(
+        { path: 'settings', method: RequestMethod.GET },
+        { path: 'settings', method: RequestMethod.PUT },
+        { path: 'portfolio/summary', method: RequestMethod.GET },
+      )
+      .forRoutes('*');
   }
 }
