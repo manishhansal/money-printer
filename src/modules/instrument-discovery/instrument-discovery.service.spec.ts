@@ -282,20 +282,20 @@ describe('InstrumentDiscoveryService', () => {
       expect(result.isTradable).toBe(false);
     });
 
-    it('classifies INDEX_FUTURE as isTradable = true', () => {
+    it('classifies INDEX_FUTURE as isTradable = false (futures not traded — options buying only)', () => {
       const future = buildInstrument({ instrumentType: 'INDEX_FUTURE' });
 
       const result = service.classifyInstrument(future, 0, 0);
 
-      expect(result.isTradable).toBe(true);
+      expect(result.isTradable).toBe(false);
     });
 
-    it('classifies STOCK_FUTURE as isTradable = true', () => {
+    it('classifies STOCK_FUTURE as isTradable = false (futures not traded — options buying only)', () => {
       const future = buildInstrument({ instrumentType: 'STOCK_FUTURE' });
 
       const result = service.classifyInstrument(future, 0, 0);
 
-      expect(result.isTradable).toBe(true);
+      expect(result.isTradable).toBe(false);
     });
   });
 
@@ -312,14 +312,14 @@ describe('InstrumentDiscoveryService', () => {
       expect(service.passesEligibilityCheck(option, 999_999, 999_999)).toBe(true);
     });
 
-    it('returns true for INDEX_FUTURE', () => {
+    it('returns false for INDEX_FUTURE (futures blocked — options buying only)', () => {
       const future = buildInstrument({ instrumentType: 'INDEX_FUTURE' });
-      expect(service.passesEligibilityCheck(future, 0, 0)).toBe(true);
+      expect(service.passesEligibilityCheck(future, 0, 0)).toBe(false);
     });
 
-    it('returns true for STOCK_FUTURE', () => {
+    it('returns false for STOCK_FUTURE (futures blocked — options buying only)', () => {
       const future = buildInstrument({ instrumentType: 'STOCK_FUTURE' });
-      expect(service.passesEligibilityCheck(future, 0, 0)).toBe(true);
+      expect(service.passesEligibilityCheck(future, 0, 0)).toBe(false);
     });
 
     it('returns true for STOCK_OPTION when both thresholds are 0', () => {
