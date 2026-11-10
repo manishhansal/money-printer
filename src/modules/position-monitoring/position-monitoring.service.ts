@@ -42,6 +42,10 @@ import {
   PositionExitReason,
   PositionExitSignal,
 } from './position-monitoring.types';
+import { GreedyTrailService } from './greedy-trail.service';
+
+/** Mechanism name used to flag a position for greedy partial-profit trailing. */
+const PARTIAL_PROFIT_MECHANISM = 'PARTIAL_PROFIT';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Service
@@ -106,6 +110,7 @@ export class PositionMonitoringService implements OnModuleInit {
     private readonly positionsRepo: Repository<Position>,
     private readonly redisService: RedisService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly greedyTrailService: GreedyTrailService,
   ) {}
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -227,12 +232,20 @@ export class PositionMonitoringService implements OnModuleInit {
           position.direction === 'LONG' ? currentPrice >= targetPrice : currentPrice <= targetPrice;
 
         if (targetHit) {
-          this.eventEmitter.emit(POSITION_EXIT_EVENT, {
-            positionId: position.id,
-            reason: PositionExitReason.TARGET_HIT,
-            currentPrice,
-            timestamp: new Date(),
-          } satisfies PositionExitSignal);
+          // ── Greedy partial-profit check ─────────────────────────────────
+          // When trailing_stop_mechanism = PARTIAL_PROFIT, the first target is
+          // treated as a scalp target. After booking 50% profit we evaluate
+          // whether to trail the remainder or take full profit.
+          if (position.trailing_stop_mechanism === PARTIAL_PROFIT_MECHANISM) {
+            void this.handlePartialProfitTarget(position, currentPrice, instrumentId);
+          } else {
+            this.eventEmitter.emit(POSITION_EXIT_EVENT, {
+              positionId: position.id,
+              reason: PositionExitReason.TARGET_HIT,
+              currentPrice,
+              timestamp: new Date(),
+            } satisfies PositionExitSignal);
+          }
         }
       }
     }
@@ -404,5 +417,65 @@ export class PositionMonitoringService implements OnModuleInit {
 
     this.subscribedInstruments.add(instrumentId);
     this.logger.debug(`Subscribed to tick channel: ${channel}`);
+  }
+
+  /**
+   * Evaluate whether to trail after the first target is hit for a PARTIAL_PROFIT position.
+   *
+   * Flow:
+   *  1. Emit PARTIAL_PROFIT_BOOKED so execution layer exits `fraction` lots.
+   *  2. GreedyTrailService decides: shouldTrail / mechanism.
+   *  3. If trail → update DB: new trailing mechanism + SL at break-even.
+   *  4. If no trail → emit TARGET_HIT (full exit of remaining lots).
+   */
+  private async handlePartialProfitTarget(
+    position: Position,
+    currentPrice: number,
+    instrumentId: string,
+  ): Promise<void> {
+    const fraction = this.greedyTrailService.firstTargetFraction;
+
+    // Step 1 — Emit partial profit event so the execution layer exits `fraction` lots.
+    this.eventEmitter.emit(POSITION_EXIT_EVENT, {
+      positionId: position.id,
+      reason: PositionExitReason.PARTIAL_PROFIT_BOOKED,
+      currentPrice,
+      timestamp: new Date(),
+      partialExitFraction: fraction,
+    });
+
+    // Step 2 — Ask GreedyTrailService whether conditions support trailing.
+    const decision = await this.greedyTrailService.decide({
+      currentPrice,
+      direction: position.direction as 'LONG' | 'SHORT',
+      entryPrice: position.average_entry_price,
+      instrumentId,
+      entryVolume: 0, // 0 = skip volume baseline; GreedyTrailService defaults pass
+      atr: 0, // ATR not available here; GreedyTrail uses snapshot-based logic
+    });
+
+    this.logger.log(`[GreedyTrail] Position ${position.id}: ${decision.reason}`);
+
+    if (decision.shouldTrail && decision.mechanism) {
+      // Step 3 — Break-even SL + switch to auto-selected trailing mechanism.
+      await this.positionsRepo.update(position.id, {
+        current_sl: position.average_entry_price,
+        trailing_stop_mechanism: decision.mechanism,
+        target_price: null, // Remove fixed target — now trail-driven
+      });
+
+      this.logger.log(
+        `[GreedyTrail] Position ${position.id} trailing with ${decision.mechanism} — ` +
+          `SL moved to break-even (${position.average_entry_price}).`,
+      );
+    } else {
+      // Step 4 — Conditions not met: exit remaining lots at market.
+      this.eventEmitter.emit(POSITION_EXIT_EVENT, {
+        positionId: position.id,
+        reason: PositionExitReason.TARGET_HIT,
+        currentPrice,
+        timestamp: new Date(),
+      } satisfies PositionExitSignal);
+    }
   }
 }

@@ -30,18 +30,14 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 
 import { Position } from '../../database/entities/positions.entity';
 import { PositionMonitoringService } from './position-monitoring.service';
+import { GreedyTrailService } from './greedy-trail.service';
 
 @Module({
   imports: [
-    // Provides the Position repository for startup load and per-addPosition
-    // DB lookups.
     TypeOrmModule.forFeature([Position]),
-
-    // Enables EventEmitter2 for POSITION_EXIT_EVENT and
-    // UNREALIZED_PNL_UPDATED_EVENT emission.
     EventEmitterModule.forRoot(),
   ],
-  providers: [PositionMonitoringService],
+  providers: [PositionMonitoringService, GreedyTrailService],
   exports: [PositionMonitoringService],
 })
 export class PositionMonitoringModule {}

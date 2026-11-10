@@ -28,6 +28,8 @@ export enum PositionExitReason {
   TRAILING_STOP_TRIGGERED = 'TRAILING_STOP_TRIGGERED',
   THETA_DECAY_THRESHOLD = 'THETA_DECAY_THRESHOLD',
   EXPIRY_SQUAREOFF = 'EXPIRY_SQUAREOFF',
+  /** First target hit — partial exit booked; remaining position now trails. */
+  PARTIAL_PROFIT_BOOKED = 'PARTIAL_PROFIT_BOOKED',
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -43,15 +45,17 @@ export enum PositionExitReason {
 export interface PositionExitSignal {
   /** UUID of the position that should be exited. */
   positionId: string;
-
   /** Reason code that triggered this exit signal. */
   reason: PositionExitReason;
-
   /** Current market price at the time the exit condition was detected. */
   currentPrice: number;
-
   /** UTC timestamp when the exit condition was evaluated. */
   timestamp: Date;
+  /**
+   * For PARTIAL_PROFIT_BOOKED only: fraction of position to exit (e.g. 0.5 = 50%).
+   * Undefined for all other reason codes (full exit).
+   */
+  partialExitFraction?: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
