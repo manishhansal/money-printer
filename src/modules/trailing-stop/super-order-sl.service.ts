@@ -233,25 +233,26 @@ export class SuperOrderSlService {
     }
 
     try {
-      const orderbook = await this.dhanApiClient.getOrderbook();
-      const order = orderbook.find((o) => o.orderId === entry.dhanOrderId);
+      const orderStatus = await this.dhanApiClient.getOrderById(entry.dhanOrderId)
+        .then(o => o.orderStatus)
+        .catch(() => null);
 
-      if (order && ACTIVE_SL_STATUSES.has(order.orderStatus)) {
+      if (orderStatus && ACTIVE_SL_STATUSES.has(orderStatus)) {
         // SL order is resting at the exchange — confirmation received.
         entry.confirmed = true;
         this.positionSlRegistry.set(positionId, entry);
 
         this.logger.log(
           `Broker SL confirmed for positionId=${positionId} ` +
-            `orderId=${entry.dhanOrderId} status=${order.orderStatus}`,
+            `orderId=${entry.dhanOrderId} status=${orderStatus}`,
         );
         return { active: true };
       }
 
       // Broker SL is not active — log, then submit a replacement.
-      const reason = order
-        ? `order status is ${order.orderStatus}`
-        : `order ${entry.dhanOrderId} not found in orderbook`;
+      const reason = orderStatus
+        ? `order status is ${orderStatus}`
+        : `order ${entry.dhanOrderId} not found or unreachable`;
 
       this.logger.warn(
         `Broker SL inactive for positionId=${positionId} — submitting replacement (${reason})`,

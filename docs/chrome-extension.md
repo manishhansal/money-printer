@@ -2,241 +2,182 @@
 
 ## Overview
 
-The Chrome Extension is the control plane for the MoneyPrinter CloudEngine. It runs as an MV3 extension with four UI surfaces and a Background Service Worker (BSW) that owns the single WSS connection to the CloudEngine. All broker credentials, session tokens, and API keys live exclusively in the BSW's memory and `chrome.storage.session` — never in `chrome.storage.local` or any DOM-accessible location.
+The Chrome Extension is the control plane for the MoneyPrinter CloudEngine. It runs as a Chrome MV3 extension with four UI surfaces and a Background Service Worker (BSW) that owns the single WebSocket connection to the CloudEngine.
+
+---
+
+## Loading the Extension (Local Dev)
+
+1. Build the extension: `npm run build:extension`
+2. Open `chrome://extensions`
+3. Enable **Developer mode** (top-right toggle)
+4. Click **Load unpacked** → select the `extension/` folder
+5. The MoneyPrinter icon appears in the Chrome toolbar
+
+After any source change: `npm run build:extension` → ↺ reload in `chrome://extensions`.
 
 ---
 
 ## Architecture
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│  Chrome Extension (MV3)                                        │
-│                                                                │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │  Background Service Worker (BSW)                         │  │
-│  │  - Owns single WSS connection to CloudEngine             │  │
-│  │  - Authoritative in-memory ExtensionState                │  │
-│  │  - Persists state to chrome.storage.session              │  │
-│  │  - Handles all chrome.runtime.onMessage from UI          │  │
-│  └───────────┬────────────────────────┬─────────────────────┘  │
-│              │ chrome.runtime.sendMessage                       │
-│  ┌───────────┴───────────────────────────────────────────────┐  │
-│  │  Popup    │  Side Panel    │  Full Dashboard               │  │
-│  └───────────────────────────────────────────────────────────┘  │
-│                                                                │
-│  WSS (wss:// only) ◄─────────────────────► CloudEngine :3000  │
-└────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│  Chrome Extension (MV3)                                            │
+│                                                                    │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │  Background Service Worker (BSW)                             │  │
+│  │  - Persistent WebSocket → ws://localhost:3003 (dev)          │  │
+│  │  - HTTP fetch → http://localhost:3002/portfolio/summary      │  │
+│  │  - In-memory ExtensionState (armedState, sessionPnl, etc.)   │  │
+│  │  - Persists to chrome.storage.session                        │  │
+│  │  - Handles: GET_STATE, REQUEST_ARM, CONFIRM_ARM, DISARM,     │  │
+│  │             OPEN_SIDE_PANEL, GET_SETTINGS, SAVE_SETTINGS     │  │
+│  └───────────┬────────────────────────┬─────────────────────────┘  │
+│              │ chrome.runtime.sendMessage                           │
+│  ┌───────────┴───────────────────────────────────────────────────┐  │
+│  │  Popup (ARM/DISARM + Settings panel)                          │  │
+│  │  Side Panel  │  Full Dashboard                                │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+│                                                                    │
+│  ws://localhost:3003 ◄──────────────────────► CloudEngine :3003   │
+│  http://localhost:3002 ◄─────────────────────► CloudEngine :3002  │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
-The extension declares only two permissions in `manifest.json`: `storage` and `alarms`. There are no content scripts and no broad host permissions.
+**Permissions declared in `manifest.json`:** `storage`, `alarms`, `sidePanel`, `tabs`
+
+**Host permissions:** `http://localhost/*`, `https://localhost/*`
 
 ---
 
-## Background Service Worker (BSW)
+## ExtensionState
 
-The BSW (`dist/background/service-worker.js`, built from `extension/src/background/background.ts`) is the single source of truth for `ExtensionState`. It is the only context with access to `chrome.storage.session`.
-
-### ExtensionState
+The BSW is the single source of truth for `ExtensionState`:
 
 ```typescript
 interface ExtensionState {
   armedState: 'DISARMED' | 'ARMED_PENDING' | 'ARMED';
   sessionToken: string | null;
   connectionState: 'connected' | 'disconnected' | 'connecting';
+  /** Net session P&L after all trading charges (INR). Fetched from /portfolio/summary. */
+  sessionPnl: number;
+  /** Number of currently open positions. */
+  activePositionsCount: number;
+  /** System health status driven by CloudEngine health metrics. */
+  healthStatus: 'Healthy' | 'Degraded' | 'Down';
 }
 ```
 
-The initial state is always `{ armedState: 'DISARMED', sessionToken: null, connectionState: 'disconnected' }`.
+Initial state: `{ armedState: 'DISARMED', sessionPnl: 0, activePositionsCount: 0, healthStatus: 'Healthy', ... }`
 
-### BSW responsibilities
+---
 
-1. **Single WSS connection** — `connectWebSocket(url)` maintains one WebSocket instance. If a socket is already `OPEN` or `CONNECTING` the existing instance is reused. On close or error the socket is re-created after a 3-second delay (`RECONNECT_DELAY_MS`).
+## Message Protocol
 
-2. **State persistence** — every call to `updateState(updates)` merges `updates` into the in-memory `currentState` and immediately calls `saveState()` to persist to `chrome.storage.session`.
+The popup and side panel communicate with the BSW via `chrome.runtime.sendMessage`. Every message returns the updated `ExtensionState` (or sub-data) in the callback.
 
-3. **State recovery on startup** — `recoverState()` is called on `chrome.runtime.onInstalled` and `chrome.runtime.onStartup`. It races `loadState()` against a 5-second timeout.
+| Message type | Direction | What it does |
+|---|---|---|
+| `GET_STATE` | Popup → BSW | Fetch P&L from `/portfolio/summary`, return full `ExtensionState` |
+| `REQUEST_ARM` | Popup → BSW | DISARMED → ARMED_PENDING; returns updated state |
+| `CONFIRM_ARM` | Popup → BSW | ARMED_PENDING → ARMED; returns updated state |
+| `DISARM` | Popup → BSW | Any → DISARMED; returns updated state |
+| `OPEN_SIDE_PANEL` | Popup → BSW | Opens the side panel via `chrome.sidePanel.open()` |
+| `GET_SETTINGS` | Popup → BSW | Fetches `GET /settings` from CloudEngine |
+| `SAVE_SETTINGS` | Popup → BSW | Sends `PUT /settings` with paper capital + risk % |
+| `RECOVERY_NOTIFICATION` | BSW → UI | Notifies popup/side panel after failed state recovery |
 
-4. **Message routing** — the BSW listens on `chrome.runtime.onMessage` for messages from the popup and side panel (see [Popup Messages](#popup-messages)).
+---
+
+## Two-Step Arming Flow
+
+A single click can never transition to `ARMED` state (Requirement 11.1):
+
+```
+DISARMED  →[Activate Live Mode]→  ARMED_PENDING  →[Confirm Arm]→  ARMED
+                                       ↓                              ↓
+                                   [Disarm]                       [Disarm]
+                                       ↓                              ↓
+                                   DISARMED                       DISARMED
+```
+
+The popup's `Activate Live Mode` button sends `REQUEST_ARM`. The `Confirm Arm` button (only visible in `ARMED_PENDING`) sends `CONFIRM_ARM`. `Disarm` sends `DISARM` from any armed state.
+
+---
+
+## Popup Settings Panel
+
+The popup has a settings section at the bottom for configuring paper trading:
+
+```
+Paper Capital (₹)  [ 50000  ]
+                   Risk/trade: ₹500 · Daily limit: ₹1,000
+Risk per trade (%) [ 1.0    ]
+[ Save Settings ]
+```
+
+Saving calls `PUT /settings` on the CloudEngine. All risk limits auto-scale — changing capital from ₹50K to ₹1L automatically doubles the per-trade risk amount.
 
 ---
 
 ## State Recovery
 
-On BSW startup `recoverState()` is called before the WSS connection is established:
+On BSW startup `recoverState()` races `loadState()` against a 5-second timeout:
 
-```
-Promise.race([
-  loadState(),           ← read chrome.storage.session
-  timeout(5000)          ← 5-second deadline
-])
-```
-
-**On success** (stored state found before timeout):
-- `armedState` is always set to `DISARMED` — armed state is never restored
-- `sessionToken` is preserved — user does not need to re-enter credentials
-- `connectionState` is set to `'disconnected'` — fresh WSS connection will be built
-
-**On timeout or storage read error:**
-- State is reset to `INITIAL_STATE` (fully DISARMED, no token)
-- `chrome.runtime.sendMessage({ type: 'RECOVERY_NOTIFICATION', message: 'Manual re-authorization required' })` is sent to any open popup or side panel
-
-**Never auto-re-arm:** ARMED and ARMED_PENDING are always reverted to DISARMED regardless of what was stored. This is a hard invariant — no code path in the BSW restores an armed state from storage.
+- **On success**: `armedState` reset to `DISARMED` (never auto-re-arm), `sessionToken` preserved, `connectionState` reset to `disconnected`.
+- **On timeout or error**: reset to `INITIAL_STATE`, notify user to re-authorize.
 
 ---
 
-## Two-Step Arming
+## WebSocket Connection (Local Dev)
 
-The two-step arm flow is enforced by both the CloudEngine (`LiveTradingService`) and the Extension popup:
+The BSW connects to `ws://localhost:3003` (plain WebSocket, no TLS). For production deployment behind an ALB the URL should be `wss://api.yourdomain.com/ws` (TLS terminated at ALB).
 
-```
-  DISARMED ──(REQUEST_ARM)──► ARMED_PENDING ──(CONFIRM_ARM)──► ARMED
-                                     │
-                              (DISARM at any time)
-                                     ▼
-                                  DISARMED
-```
-
-A single user action can never reach `ARMED` from `DISARMED`. The popup sends `REQUEST_ARM` on the Activate button click, which moves to `ARMED_PENDING`. A second explicit action (`CONFIRM_ARM` on the Confirm button) is required to reach `ARMED`.
-
----
-
-## Popup Messages
-
-Messages from the popup to the BSW use `chrome.runtime.sendMessage`:
-
-| Message type | Sent when | BSW action |
-|---|---|---|
-| `GET_STATE` | Popup opens | Returns current `ExtensionState` |
-| `REQUEST_ARM` | User clicks Activate button | Transitions DISARMED → ARMED_PENDING; sends `requestArm` to CloudEngine |
-| `CONFIRM_ARM` | User clicks Confirm button (visible only in ARMED_PENDING) | Transitions ARMED_PENDING → ARMED; sends `confirmArm` to CloudEngine |
-| `DISARM` | User clicks Disarm button (visible in ARMED or ARMED_PENDING) | Transitions any state → DISARMED; sends `disarm` to CloudEngine |
-
-The popup renders button visibility based on the received state:
-- **Activate button** — disabled when `armedState` is `ARMED_PENDING` or `ARMED`
-- **Confirm button** — visible and enabled only when `armedState` is `ARMED_PENDING`
-- **Disarm button** — visible when `armedState` is `ARMED` or `ARMED_PENDING`
-
----
-
-## Side Panel
-
-The side panel (`extension/src/sidepanel/sidepanel.ts`) provides live operational visibility:
-
-### Live Positions
-
-Positions are keyed by ID in a `Map<string, Position>` for O(1) updates on each CloudEngine push. Each position displays:
-- Trading symbol, direction (LONG/SHORT)
-- Entry price, current price
-- Unrealized P&L
-- MFE (Maximum Favourable Excursion) and MAE (Maximum Adverse Excursion) — pushed from `PositionMonitoringService`
-
-### Signal Feed
-
-The last 10 scored signals, ordered newest-first (index 0 = most recent). The feed is capped at `MAX_SIGNAL_FEED_SIZE = 10`. Each entry shows:
-- Strategy code, composite score (0–100)
-- Status: `active`, `rejected`, or `expired`
-- Rejection reason (when status is `rejected`)
-- Timestamp
-
-### Alert Queue
-
-Only `MAX`-priority alerts are displayed in the side panel alert queue. `CRITICAL`, `WARNING`, and `INFO` alerts are visible in the full dashboard. Each MAX-priority alert has an explicit **ACK** button — acknowledged alerts are removed from the queue. The `alertQueue` array contains only unacknowledged MAX-priority alerts.
-
----
-
-## Full Dashboard
-
-The full dashboard (`extension/src/dashboard/dashboard.ts`) provides analytics and monitoring:
-
-### Strategy Performance Table
-
-A table with one row per strategy showing: strategy code, win rate, expectancy, net P&L, and trade count. Data is pushed from CloudEngine analytics.
-
-### Capital Growth Chart
-
-An ordered array of `CapitalDataPoint` entries (`{ date: string, capital: number }`). Points are appended in chronological order and rendered as a time-series chart.
-
-### Market Regime Heatmap
-
-`RegimeHeatmapEntry[]` sorted by `signalCount` descending. Shows which regimes have produced the most signals, allowing quick identification of productive vs dormant regime states.
-
-### Options Flow Panel
-
-One row per monitored instrument showing: symbol, net OI change, put/call ratio, IV skew, large-block indicator, and a **staleness indicator**. When `isStale = true` (data > 60 seconds old) the row is visually flagged and the caller must suppress the `optionsFuturesConfirmation` score contribution per Requirement 20.7.
-
-### Alert Queue
-
-The dashboard alert queue receives all CloudEngine push notifications regardless of priority (MAX, CRITICAL, WARNING, INFO). Each alert shows: ID, priority, title, message.
+The `DEFAULT_WSS_URL` constant in `background.ts` controls this. Auto-reconnects with 3-second delay.
 
 ---
 
 ## Security Invariants
 
-Security invariants are implemented in `extension/src/security/security-invariants.ts` and enforced at every storage write and connection attempt.
+`extension/src/security/security-invariants.ts` enforces:
 
-### Forbidden `chrome.storage.local` Keys
+1. **Forbidden `chrome.storage.local` keys** — `sessionToken`, `brokerCredentials`, `apiKey`, `dhanToken`, `accessToken`, `refreshToken` must NEVER be stored in `chrome.storage.local`. Use `chrome.storage.session` exclusively. `secureLocalStorageSet()` throws `SecurityError` if any forbidden key is attempted.
 
-The following keys are forbidden in `chrome.storage.local`:
+2. **URL validation** — `assertSecureUrl(url)` throws for URLs not starting with `wss://` or `https://`. Plain `ws://` and `http://` are blocked in production.
 
-```typescript
-const FORBIDDEN_LOCAL_STORAGE_KEYS = [
-  'sessionToken',
-  'brokerCredentials',
-  'apiKey',
-  'dhanToken',
-  'accessToken',
-  'refreshToken',
-] as const;
-```
-
-`secureLocalStorageSet(items)` checks every key against this list before calling `chrome.storage.local.set()`. If any key matches, a `SecurityError` is thrown and no write occurs. This prevents credential exposure to content scripts that have `chrome.storage.local` access.
-
-### URL Validation
-
-`assertSecureUrl(url)` throws a `SecurityError` for any URL not beginning with `wss://` or `https://`. This is called before every WebSocket connection and HTTP request originating from the extension. The CloudEngine's `DEFAULT_WSS_URL` (`wss://localhost:3000`) satisfies this constraint in development; production deployments use a real `wss://` endpoint.
-
-### Storage Scope
-
-All sensitive data (`sessionToken`, `armedState`, `connectionState`) lives in `chrome.storage.session`, which is BSW-scoped and not accessible to content scripts. `chrome.storage.local` is used only for non-sensitive extension configuration.
+> Local dev exception: the BSW uses `ws://localhost:3003` and `http://localhost:3002` explicitly — these bypass `assertSecureUrl()` because they're hardcoded connection targets, not user-supplied URLs.
 
 ---
 
-## Manifest
+## Build System
 
-```json
-{
-  "manifest_version": 3,
-  "name": "MoneyPrinter",
-  "version": "0.1.0",
-  "description": "Autonomous trading control plane for the MoneyPrinter CloudEngine. Communicates over WSS/HTTPS exclusively.",
-  "permissions": ["storage", "alarms"],
-  "background": {
-    "service_worker": "dist/background/service-worker.js",
-    "type": "module"
-  },
-  "action": {
-    "default_popup": "popup.html",
-    "default_title": "MoneyPrinter"
-  }
-}
-```
-
-No content scripts are declared. No host permissions are declared. The `alarms` permission enables scheduled background tasks (e.g. proactive token refresh scheduling).
-
----
-
-## Testing the Extension
-
-Extension tests run with the jsdom environment using the config in `extension/jest.config.js`:
+The extension is bundled with **esbuild** via `extension/build.mjs`:
 
 ```bash
-npm run test:extension
+npm run build:extension          # one-shot
+npm run build:extension:watch    # watch for changes
 ```
 
-Test files follow the same `*.spec.ts` naming convention as the CloudEngine. State management helpers and rendering functions are exported from their modules so tests can exercise them without a DOM or Chrome runtime:
+Entry points compiled:
+- `src/background/background.ts` → `dist/background/background.js` (IIFE, Chrome 120)
+- `src/popup/popup.ts` → `dist/popup/popup.js`
+- `src/sidepanel/sidepanel.ts` → `dist/sidepanel/sidepanel.js`
+- `src/dashboard/dashboard.ts` → `dist/dashboard/dashboard.js`
 
-- `background.ts` exports `getCurrentState()`, `updateState()`, `recoverState()`, `connectWebSocket()`, and `_resetStateForTesting()`
-- `sidepanel.ts` exports `signalFeed`, `alertQueue`, `positions`, and `resetState()`
-- `popup.ts` exports `formatPnl()` and `renderState()`
+HTML files are copied: `src/popup/popup.html` → `dist/popup/popup.html`, etc.
 
-DOM-touching calls are guarded with `typeof document !== 'undefined'` so tests run cleanly in jsdom and in the actual BSW environment (where there is no DOM).
+The `dist/` directory is committed to git so the extension can be loaded immediately without a build step.
+
+---
+
+## Tests
+
+```bash
+# All 53 extension tests
+npm run test:extension
+
+# Single suite
+npx jest --config extension/jest.config.js --testPathPattern="background" --forceExit
+```
+
+The extension uses Jest with jsdom for popup tests (`@jest-environment jsdom` docblock) and node environment for background/security tests. The `jest.setup.ts` provides a mock `chrome` global with `storage.session`, `runtime`, `tabs`, `sidePanel`, and `onMessage`.

@@ -20,10 +20,10 @@ import { DhanOrder, DhanOrderResponse, DhanOrderbookResponse } from '../dhan/dha
 // Test-double factories
 // ─────────────────────────────────────────────────────────────────────────────
 
-function buildDhanApiClientMock(): jest.Mocked<Pick<DhanApiClient, 'placeOrder' | 'getOrderbook'>> {
+function buildDhanApiClientMock(): jest.Mocked<Pick<DhanApiClient, 'placeOrder' | 'getOrderById'>> {
   return {
     placeOrder: jest.fn(),
-    getOrderbook: jest.fn(),
+    getOrderById: jest.fn(),
   };
 }
 
@@ -40,7 +40,7 @@ function buildNotificationServiceMock(): jest.Mocked<Pick<NotificationService, '
 }
 
 function buildService(
-  dhanMock: jest.Mocked<Pick<DhanApiClient, 'placeOrder' | 'getOrderbook'>>,
+  dhanMock: jest.Mocked<Pick<DhanApiClient, 'placeOrder' | 'getOrderById'>>,
   secretsMock: jest.Mocked<Pick<SecretsService, 'get'>>,
   notificationMock: jest.Mocked<Pick<NotificationService, 'publish'>>,
 ): SuperOrderSlService {
@@ -249,7 +249,7 @@ describe('SuperOrderSlService — verifyBrokerSlConfirmation() — confirmed', (
     const notification = buildNotificationServiceMock();
 
     dhan.placeOrder.mockResolvedValue(buildOrderResponse(dhanOrderId));
-    dhan.getOrderbook.mockResolvedValue([orderbookEntry] as DhanOrderbookResponse);
+    dhan.getOrderById.mockResolvedValue(orderbookEntry);
 
     const svc = buildService(dhan, secrets, notification);
     await svc.registerBrokerSl('pos-010', 'instr-100', 19000, 'LONG', 50);
@@ -289,14 +289,14 @@ describe('SuperOrderSlService — verifyBrokerSlConfirmation() — confirmed', (
     expect(entry.confirmed).toBe(true);
   });
 
-  it('calls getOrderbook() exactly once', async () => {
+  it('calls getOrderById() with registered dhanOrderId', async () => {
     const { svc, dhan } = await setupWithRegisteredSl(
       'order-013',
       buildDhanOrder({ orderId: 'order-013', orderStatus: 'PENDING' }),
     );
 
     await svc.verifyBrokerSlConfirmation('pos-010');
-    expect(dhan.getOrderbook).toHaveBeenCalledTimes(1);
+    expect(dhan.getOrderById).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -314,9 +314,9 @@ describe('SuperOrderSlService — verifyBrokerSlConfirmation() — inactive/repl
       .mockResolvedValueOnce(buildOrderResponse('order-021')) // original
       .mockResolvedValueOnce(buildOrderResponse('order-022')); // replacement
 
-    dhan.getOrderbook.mockResolvedValue([
+    dhan.getOrderById.mockResolvedValue(
       buildDhanOrder({ orderId: 'order-021', orderStatus: 'REJECTED' }),
-    ] as DhanOrderbookResponse);
+    );
 
     const svc = buildService(dhan, secrets, notification);
     await svc.registerBrokerSl('pos-020', 'instr-200', 18500, 'LONG', 50);
@@ -336,9 +336,9 @@ describe('SuperOrderSlService — verifyBrokerSlConfirmation() — inactive/repl
       .mockResolvedValueOnce(buildOrderResponse('order-023'))
       .mockResolvedValueOnce(buildOrderResponse('order-024'));
 
-    dhan.getOrderbook.mockResolvedValue([
+    dhan.getOrderById.mockResolvedValue(
       buildDhanOrder({ orderId: 'order-023', orderStatus: 'CANCELLED' }),
-    ] as DhanOrderbookResponse);
+    );
 
     const svc = buildService(dhan, secrets, notification);
     await svc.registerBrokerSl('pos-021', 'instr-201', 18400, 'SHORT', 25);
@@ -359,7 +359,7 @@ describe('SuperOrderSlService — verifyBrokerSlConfirmation() — inactive/repl
       .mockResolvedValueOnce(buildOrderResponse('order-026'));
 
     // Orderbook is empty — original order not found
-    dhan.getOrderbook.mockResolvedValue([] as DhanOrderbookResponse);
+    dhan.getOrderById.mockRejectedValue(new Error('order not found'));
 
     const svc = buildService(dhan, secrets, notification);
     await svc.registerBrokerSl('pos-022', 'instr-202', 17800, 'LONG', 75);
@@ -381,7 +381,7 @@ describe('SuperOrderSlService — verifyBrokerSlConfirmation() — inactive/repl
       .mockResolvedValueOnce(buildOrderResponse('order-027'))
       .mockResolvedValueOnce(buildOrderResponse('order-028'));
 
-    dhan.getOrderbook.mockResolvedValue([] as DhanOrderbookResponse);
+    dhan.getOrderById.mockRejectedValue(new Error('order not found'));
 
     const svc = buildService(dhan, secrets, notification);
     await svc.registerBrokerSl('pos-023', 'instr-203', 17500, 'LONG', 60, 'NSE_FNO', 'INTRADAY');
@@ -407,7 +407,7 @@ describe('SuperOrderSlService — verifyBrokerSlConfirmation() — inactive/repl
       .mockResolvedValueOnce(buildOrderResponse('order-029'))
       .mockResolvedValueOnce(buildOrderResponse('order-030'));
 
-    dhan.getOrderbook.mockResolvedValue([] as DhanOrderbookResponse);
+    dhan.getOrderById.mockRejectedValue(new Error('order not found'));
 
     const svc = buildService(dhan, secrets, notification);
     await svc.registerBrokerSl('pos-024', 'instr-204', 17200, 'LONG', 50);
@@ -428,7 +428,7 @@ describe('SuperOrderSlService — verifyBrokerSlConfirmation() — inactive/repl
       .mockResolvedValueOnce(buildOrderResponse('order-031'))
       .mockRejectedValueOnce(new Error('Exchange rejection'));
 
-    dhan.getOrderbook.mockResolvedValue([] as DhanOrderbookResponse);
+    dhan.getOrderById.mockRejectedValue(new Error('order not found'));
 
     const svc = buildService(dhan, secrets, notification);
     await svc.registerBrokerSl('pos-025', 'instr-205', 16900, 'LONG', 50);
@@ -450,16 +450,16 @@ describe('SuperOrderSlService — verifyBrokerSlConfirmation() — inactive/repl
 
     expect(result.active).toBe(false);
     expect(result.replacementOrderId).toBeUndefined();
-    expect(dhan.getOrderbook).not.toHaveBeenCalled();
+    expect(dhan.getOrderById).not.toHaveBeenCalled();
   });
 
-  it('returns { active: false } when getOrderbook() throws', async () => {
+  it('returns { active: false } when getOrderById() throws', async () => {
     const dhan = buildDhanApiClientMock();
     const secrets = buildSecretsServiceMock();
     const notification = buildNotificationServiceMock();
 
     dhan.placeOrder.mockResolvedValue(buildOrderResponse('order-032'));
-    dhan.getOrderbook.mockRejectedValue(new Error('Network error'));
+    dhan.getOrderById.mockRejectedValue(new Error('Network error'));
 
     const svc = buildService(dhan, secrets, notification);
     await svc.registerBrokerSl('pos-026', 'instr-206', 16500, 'LONG', 50);
@@ -478,7 +478,7 @@ describe('SuperOrderSlService — verifyBrokerSlConfirmation() — inactive/repl
       .mockResolvedValueOnce(buildOrderResponse('order-033'))
       .mockResolvedValueOnce(buildOrderResponse('order-034'));
 
-    dhan.getOrderbook.mockResolvedValue([] as DhanOrderbookResponse);
+    dhan.getOrderById.mockRejectedValue(new Error('order not found'));
 
     const svc = buildService(dhan, secrets, notification);
     await svc.registerBrokerSl('pos-027', 'instr-207', 20500, 'SHORT', 30);
@@ -530,9 +530,9 @@ describe('SuperOrderSlService — getBrokerSlStatus()', () => {
     const notification = buildNotificationServiceMock();
 
     dhan.placeOrder.mockResolvedValue(buildOrderResponse('order-041'));
-    dhan.getOrderbook.mockResolvedValue([
+    dhan.getOrderById.mockResolvedValue(
       buildDhanOrder({ orderId: 'order-041', orderStatus: 'PENDING' }),
-    ] as DhanOrderbookResponse);
+    );
 
     const svc = buildService(dhan, secrets, notification);
     await svc.registerBrokerSl('pos-031', 'instr-301', 15200, 'SHORT', 50);

@@ -39,8 +39,10 @@ export const dataSourceOptions: DataSourceOptions = {
   // Entity discovery — glob covers both ts-node (*.ts) and compiled (*.js) contexts.
   entities: [join(__dirname, '..', '**', '*.entity.{ts,js}')],
 
-  // Migration files live in the project-root `migrations/` directory.
-  migrations: [join(__dirname, '..', '..', 'migrations', '*.{ts,js}')],
+  // Migration files live in `src/migrations/` (compiled to `dist/migrations/`).
+  // Using one level up from __dirname covers both ts-node (src/database → src/migrations)
+  // and the compiled runtime (dist/database → dist/migrations).
+  migrations: [join(__dirname, '..', 'migrations', '*.{ts,js}')],
 
   // ALWAYS false — schema changes are managed exclusively through migrations.
   synchronize: false,

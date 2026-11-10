@@ -44,13 +44,13 @@ Audit log failures are caught and logged at ERROR level but never abort the prim
 
 The on-disk wire format is `base64(ivHex:authTagHex:ciphertextHex)` with a 96-bit random IV per write and a 128-bit GCM authentication tag. This means the same plaintext produces a different ciphertext on every write (IV randomness), and any tampering with the ciphertext or auth tag causes decryption to return `null` with a console warning rather than throwing.
 
-Encrypted columns:
+**Encrypted columns:**
 
 | Entity | Column | Why |
 |---|---|---|
-| `BrokerAccounts` | `api_key` | Dhan API key — broker access credential |
-| `BrokerAccounts` | `access_token` | Dhan access token — broker access credential |
-| `BrokerSessions` | `session_token` | Active JWT — session hijack risk if exposed |
+| `BrokerAccounts` | `api_key` | Dhan API key |
+| `BrokerAccounts` | `access_token` | Dhan access token |
+| `BrokerSessions` | `session_token` | Active JWT |
 | `AuditLogs` | `previous_value` | May contain sensitive config values |
 | `AuditLogs` | `new_value` | May contain sensitive config values |
 
@@ -133,16 +133,34 @@ The extension's `manifest.json` (MV3) declares only two permissions: `storage` a
 
 ## Paper/Live Isolation
 
-Isolation is enforced at four levels to ensure paper trading activity can never affect live trading state:
+Isolation is enforced at four levels:
 
 | Layer | Mechanism |
 |---|---|
-| DB tables | Separate table pairs: `orders`/`paper_orders`, `executions`/`paper_executions`, `positions`/`paper_positions`, `trades`/`paper_trades` |
-| Redis keys | `paper:*` namespace prefix; live engine never writes keys with `paper:` prefix |
-| Event channels | `events:paper:*` channel prefix; live engine consumers never subscribe to `events:paper:*` |
+| DB tables | `paper_*` prefix: `paper_orders`, `paper_executions`, `paper_positions`, `paper_trades` |
+| Redis keys | `paper:*` namespace prefix; live engine never writes `paper:` keys |
+| Event channels | `events:paper:*` channel prefix |
 | Dhan API | Paper engine never calls `DhanApiClient`; all fills are simulated |
+| Entry direction | Paper engine **only allows BUY** (no SHORT selling) |
 
-The `EngineType` discriminant (`'LIVE' | 'PAPER'`) appears as a column on shared tables (`CapitalLedgers`, `RiskEvents`). Services always filter by `engine` to prevent cross-contamination at the query level.
+## Broker-Side Safety Net
+
+At session open (09:15 IST), the CloudEngine configures Dhan's P&L Exit API as a broker-side safety net:
+
+```
+setPnlExit({
+  lossValue: DAILY_LOSS_LIMIT_RUPEES,
+  profitValue: DAILY_LOSS_LIMIT × 3,
+  productType: ['INTRADAY'],
+  enableKillSwitch: true   ← Dhan locks account after exit
+})
+```
+
+This provides **two independent layers** of daily loss protection:
+1. `DailyLossStateMachineService` (in-process) — blocks new orders, emits EMERGENCY_HALT
+2. Dhan P&L Exit API (broker-side) — closes all positions even if CloudEngine crashes
+
+The Dhan account-level kill switch is also activated when our in-process kill switch fires, preventing any new orders from being placed through the account for the rest of the day.
 
 ---
 

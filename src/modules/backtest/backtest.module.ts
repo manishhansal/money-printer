@@ -15,8 +15,10 @@
 
 import { Module } from '@nestjs/common';
 import { BacktestService } from './backtest.service';
+import { TradingChargesModule } from '../charges/trading-charges.module';
 
 @Module({
+  imports: [TradingChargesModule],
   providers: [BacktestService],
   exports: [BacktestService],
 })

@@ -52,7 +52,7 @@ describe('Background Service Worker', () => {
       const storedState: ExtensionState = {
         armedState: 'ARMED',
         sessionToken: 'live-session-token',
-        connectionState: 'connected',
+        connectionState: 'connected', sessionPnl: 0, activePositionsCount: 0, healthStatus: 'Healthy',
       };
 
       jest.spyOn(stateManager, 'loadState').mockResolvedValue(storedState);
@@ -70,7 +70,7 @@ describe('Background Service Worker', () => {
       const storedState: ExtensionState = {
         armedState: 'ARMED_PENDING',
         sessionToken: 'pending-session-token',
-        connectionState: 'connecting',
+        connectionState: 'connecting', sessionPnl: 0, activePositionsCount: 0, healthStatus: 'Healthy',
       };
 
       jest.spyOn(stateManager, 'loadState').mockResolvedValue(storedState);
@@ -87,7 +87,7 @@ describe('Background Service Worker', () => {
       const storedState: ExtensionState = {
         armedState: 'DISARMED',
         sessionToken: null,
-        connectionState: 'disconnected',
+        connectionState: 'disconnected', sessionPnl: 0, activePositionsCount: 0, healthStatus: 'Healthy',
       };
 
       jest.spyOn(stateManager, 'loadState').mockResolvedValue(storedState);
@@ -253,7 +253,7 @@ describe('Background Service Worker', () => {
         jest.spyOn(stateManager, 'loadState').mockResolvedValue({
           armedState: storedArmedState,
           sessionToken: null,
-          connectionState: 'connected',
+          connectionState: 'connected', sessionPnl: 0, activePositionsCount: 0, healthStatus: 'Healthy',
         });
         jest.spyOn(stateManager, 'saveState').mockResolvedValue(undefined);
 
@@ -268,7 +268,7 @@ describe('Background Service Worker', () => {
       jest.spyOn(stateManager, 'loadState').mockResolvedValue({
         armedState: 'ARMED',
         sessionToken: 'tok',
-        connectionState: 'connected',
+        connectionState: 'connected', sessionPnl: 0, activePositionsCount: 0, healthStatus: 'Healthy',
       });
       jest.spyOn(stateManager, 'saveState').mockResolvedValue(undefined);
 

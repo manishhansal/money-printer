@@ -32,6 +32,7 @@
  */
 
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import { OnEvent } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -148,6 +149,7 @@ export class LiveTradingService implements OnModuleInit {
     private readonly notificationService: NotificationService,
     private readonly secretsService: SecretsService,
     private readonly redisService: RedisService,
+    private readonly configService: ConfigService,
   ) {}
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -527,6 +529,19 @@ export class LiveTradingService implements OnModuleInit {
 
     // ── Step 5: Schedule 10-second confirmation check ─────────────────────────
     this.scheduleKillSwitchConfirmationCheck(pendingExitOrders, activatedAt);
+
+    // ── Step 6: Activate Dhan account-level kill switch ───────────────────────
+    // Belt-and-suspenders: even if the CloudEngine crashes, Dhan will reject
+    // any new orders placed through this account for the rest of the day.
+    try {
+      await this.dhanApiClient.setKillSwitch('ACTIVATE');
+      this.logger.warn('[KILL SWITCH] Dhan account-level kill switch ACTIVATED.');
+    } catch (err) {
+      this.logger.error(
+        `[KILL SWITCH] Failed to activate Dhan account kill switch: ${(err as Error).message}. ` +
+          'CloudEngine kill switch is still active — Dhan may still accept orders if restarted.',
+      );
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -558,6 +573,66 @@ export class LiveTradingService implements OnModuleInit {
       this.logger.warn(
         `Session entered EOD_RECONCILIATION phase at ${event.timestamp.toISOString()} — ` +
           'new entries remain blocked',
+      );
+      // Clean up broker-side P&L exit rule at session end.
+      void this.disableBrokerPnlExit();
+    }
+
+    // 09:15 IST — market opens. Set broker-side P&L exit as a safety net.
+    // Even if the CloudEngine crashes, Dhan will still stop-loss the account
+    // at the configured daily loss limit.
+    if (event.phase === SessionPhase.OPENING_VOLATILITY) {
+      void this.enableBrokerPnlExit();
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Broker-side P&L exit helpers
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Enable the Dhan broker-side P&L auto-exit at session open (09:15 IST).
+   *
+   * Configures Dhan to automatically close all INTRADAY positions if:
+   *   - Cumulative loss reaches DAILY_LOSS_LIMIT_RUPEES (from env), OR
+   *   - Cumulative profit reaches 3× DAILY_LOSS_LIMIT_RUPEES (take-profit)
+   *
+   * When the limit is breached, Dhan also activates the account-level kill
+   * switch so no new orders can be placed for the rest of the day.
+   *
+   * This is belt-and-suspenders: the in-process DailyLossStateMachineService
+   * handles it at the CloudEngine level; Dhan handles it at the broker level.
+   */
+  private async enableBrokerPnlExit(): Promise<void> {
+    const lossLimit = this.configService.get<number>('DAILY_LOSS_LIMIT_RUPEES', 10000);
+    const profitTarget = lossLimit * 3; // greedy: target 3× the risk
+
+    try {
+      await this.dhanApiClient.setPnlExit({
+        lossValue: String(lossLimit),
+        profitValue: String(profitTarget),
+        productType: ['INTRADAY'],
+        enableKillSwitch: true,
+      });
+      this.logger.log(
+        `[BrokerSafety] P&L exit configured: loss=₹${lossLimit}, profit=₹${profitTarget}, ` +
+          'killSwitch=enabled on breach.',
+      );
+    } catch (err) {
+      this.logger.error(
+        `[BrokerSafety] Failed to configure broker P&L exit: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  /** Disable the Dhan broker-side P&L exit rule at session end. */
+  private async disableBrokerPnlExit(): Promise<void> {
+    try {
+      await this.dhanApiClient.deletePnlExit();
+      this.logger.log('[BrokerSafety] Broker P&L exit rule disabled at session end.');
+    } catch (err) {
+      this.logger.debug(
+        `[BrokerSafety] deletePnlExit at session end: ${(err as Error).message}`,
       );
     }
   }

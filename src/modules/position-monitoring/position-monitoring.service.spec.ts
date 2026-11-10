@@ -29,6 +29,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Position } from '../../database/entities/positions.entity';
 import { RedisService } from '../redis/redis.service';
 import { PositionMonitoringService } from './position-monitoring.service';
+import { GreedyTrailService } from './greedy-trail.service';
 import {
   POSITION_EXIT_EVENT,
   UNREALIZED_PNL_UPDATED_EVENT,
@@ -106,6 +107,13 @@ async function buildService(): Promise<{
       { provide: getRepositoryToken(Position), useValue: positionsRepo },
       { provide: RedisService, useValue: redisService },
       { provide: EventEmitter2, useValue: eventEmitter },
+      {
+        provide: GreedyTrailService,
+        useValue: {
+          firstTargetFraction: 0.5,
+          decide: jest.fn().mockResolvedValue({ shouldTrail: false, passedConditions: 0, reason: 'mock' }),
+        },
+      },
     ],
   }).compile();
 

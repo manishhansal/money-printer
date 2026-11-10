@@ -23,17 +23,27 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { CapitalLedgers } from '../../database/entities/capital-ledgers.entity';
 import { Position } from '../../database/entities/positions.entity';
+import { PaperTrade } from '../../database/entities/paper-trades.entity';
+import { Trade } from '../../database/entities/trades.entity';
 import { UserSettings } from '../../database/entities/user-settings.entity';
 import { SystemHealthEvents } from '../../database/entities/system-health-events.entity';
 
 import { PortfolioService } from './portfolio.service';
+import { PortfolioController } from './portfolio.controller';
+import { SettingsController } from './settings.controller';
 
 @Module({
   imports: [
-    // Register the four repositories consumed by PortfolioService.
-    // DataSource is provided globally by TypeOrmModule.forRoot() in AppModule.
-    TypeOrmModule.forFeature([CapitalLedgers, Position, UserSettings, SystemHealthEvents]),
+    TypeOrmModule.forFeature([
+      CapitalLedgers,
+      Position,
+      PaperTrade,
+      Trade,
+      UserSettings,
+      SystemHealthEvents,
+    ]),
   ],
+  controllers: [PortfolioController, SettingsController],
   providers: [PortfolioService],
   exports: [PortfolioService],
 })

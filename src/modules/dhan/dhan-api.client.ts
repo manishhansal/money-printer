@@ -27,12 +27,20 @@ import {
   DhanFundLimitResponse,
   DhanHistoricalCandleRequest,
   DhanIntradayCandleRequest,
+  DhanKillSwitchResponse,
+  DhanLtpResponse,
   DhanModifyOrderRequest,
   DhanModifySuperOrderRequest,
+  DhanOhlcResponse,
   DhanOptionChainResponse,
+  DhanOptionExpiryListResponse,
+  DhanOrder,
   DhanOrderbookResponse,
   DhanOrderRequest,
   DhanOrderResponse,
+  DhanPnlExitGetResponse,
+  DhanPnlExitRequest,
+  DhanPnlExitResponse,
   DhanPortfolioResponse,
   DhanPositionsResponse,
   DhanQuoteRequest,
@@ -534,5 +542,154 @@ export class DhanApiClient implements OnModuleDestroy {
    */
   async getFundLimit(): Promise<DhanFundLimitResponse> {
     return this.request<DhanFundLimitResponse>('GET', '/v2/fundlimit');
+  }
+
+  // ---------------------------------------------------------------------------
+  // 16. Single order status
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Retrieve the status of a single order by its Dhan order ID.
+   *
+   * Maps to GET /v2/orders/{order-id}.
+   * More efficient than getOrderbook() when only one order needs to be checked.
+   */
+  async getOrderById(dhanOrderId: string): Promise<DhanOrder> {
+    return this.request<DhanOrder>('GET', `/v2/orders/${dhanOrderId}`);
+  }
+
+  // ---------------------------------------------------------------------------
+  // 17. LTP snapshot (lightweight)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Fetch the Last Traded Price for a list of instruments.
+   *
+   * Maps to POST /v2/marketfeed/ltp.
+   * Lightweight alternative to getQuote() — no market depth returned.
+   * Requires client-id header.
+   */
+  async getLtp(request: DhanQuoteRequest): Promise<DhanLtpResponse> {
+    return this.request<DhanLtpResponse>(
+      'POST',
+      '/v2/marketfeed/ltp',
+      request,
+      true, // client-id required
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // 18. OHLC snapshot
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Fetch OHLC + LTP for a list of instruments.
+   *
+   * Maps to POST /v2/marketfeed/ohlc.
+   * Returns open, high, low, close, and last traded price.
+   * Requires client-id header.
+   */
+  async getOhlcSnapshot(request: DhanQuoteRequest): Promise<DhanOhlcResponse> {
+    return this.request<DhanOhlcResponse>(
+      'POST',
+      '/v2/marketfeed/ohlc',
+      request,
+      true, // client-id required
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // 19. Option chain expiry list
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Retrieve all active expiry dates for a given underlying instrument.
+   *
+   * Maps to POST /v2/optionchain/expirylist.
+   * Used by InstrumentDiscovery to know which expiries are available before
+   * fetching the full option chain.
+   * Requires client-id header.
+   *
+   * @param underlyingScrip  Security ID of the underlying (integer).
+   * @param underlyingSeg    Exchange segment (e.g. 'IDX_I', 'NSE_FNO').
+   */
+  async getOptionExpiryList(
+    underlyingScrip: number,
+    underlyingSeg: string,
+  ): Promise<DhanOptionExpiryListResponse> {
+    return this.request<DhanOptionExpiryListResponse>(
+      'POST',
+      '/v2/optionchain/expirylist',
+      { UnderlyingScrip: underlyingScrip, UnderlyingSeg: underlyingSeg },
+      true, // client-id required
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // 20–22. Dhan Kill Switch (account-level)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Activate or deactivate the Dhan account-level kill switch.
+   *
+   * Maps to POST /v2/killswitch?killSwitchStatus=ACTIVATE|DEACTIVATE.
+   * When ACTIVATED, Dhan disables ALL trading for the current day.
+   * Note: All positions must be closed and no pending orders must exist
+   * before Dhan will accept activation.
+   */
+  async setKillSwitch(
+    status: 'ACTIVATE' | 'DEACTIVATE',
+  ): Promise<DhanKillSwitchResponse> {
+    return this.request<DhanKillSwitchResponse>(
+      'POST',
+      `/v2/killswitch?killSwitchStatus=${status}`,
+    );
+  }
+
+  /**
+   * Get the current kill switch status for this account.
+   *
+   * Maps to GET /v2/killswitch.
+   */
+  async getKillSwitchStatus(): Promise<DhanKillSwitchResponse> {
+    return this.request<DhanKillSwitchResponse>('GET', '/v2/killswitch');
+  }
+
+  // ---------------------------------------------------------------------------
+  // 23–25. P&L Based Auto-Exit (broker-side safety net)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Configure a broker-side P&L based auto-exit rule.
+   *
+   * Maps to POST /v2/pnlExit.
+   * When cumulative P&L reaches profitValue or -lossValue, Dhan closes all
+   * matching positions automatically. Active for the current trading day only.
+   *
+   * Use this as a belt-and-suspenders complement to the in-process
+   * DailyLossStateMachineService — if the CloudEngine crashes, Dhan still
+   * enforces the loss limit.
+   */
+  async setPnlExit(request: DhanPnlExitRequest): Promise<DhanPnlExitResponse> {
+    return this.request<DhanPnlExitResponse>('POST', '/v2/pnlExit', request);
+  }
+
+  /**
+   * Disable the active P&L based exit configuration.
+   *
+   * Maps to DELETE /v2/pnlExit.
+   * Called at session end or when the CloudEngine manages exits independently.
+   */
+  async deletePnlExit(): Promise<DhanPnlExitResponse> {
+    return this.request<DhanPnlExitResponse>('DELETE', '/v2/pnlExit');
+  }
+
+  /**
+   * Get the currently active P&L based exit configuration.
+   *
+   * Maps to GET /v2/pnlExit.
+   */
+  async getPnlExit(): Promise<DhanPnlExitGetResponse> {
+    return this.request<DhanPnlExitGetResponse>('GET', '/v2/pnlExit');
   }
 }

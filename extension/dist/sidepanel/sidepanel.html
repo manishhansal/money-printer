@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MoneyPrinter — Side Panel</title>
+    <style>
+      /* ------------------------------------------------------------------ */
+      /* Reset & base                                                         */
+      /* ------------------------------------------------------------------ */
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        font-size: 13px;
+        background: #0d1117;
+        color: #c9d1d9;
+        min-width: 320px;
+        padding: 8px;
+      }
+
+      h2 {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #8b949e;
+        margin-bottom: 6px;
+      }
+
+      section {
+        margin-bottom: 16px;
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* Positions table                                                      */
+      /* ------------------------------------------------------------------ */
+      #positions-table-wrapper {
+        overflow-x: auto;
+      }
+
+      #positions-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+
+      #positions-table thead th {
+        text-align: left;
+        padding: 4px 6px;
+        color: #8b949e;
+        border-bottom: 1px solid #21262d;
+        white-space: nowrap;
+      }
+
+      #positions-table tbody td {
+        padding: 5px 6px;
+        border-bottom: 1px solid #161b22;
+        vertical-align: middle;
+      }
+
+      #positions-table tbody tr:hover {
+        background: #161b22;
+      }
+
+      .direction-badge {
+        display: inline-block;
+        font-size: 10px;
+        font-weight: 700;
+        padding: 1px 5px;
+        border-radius: 3px;
+      }
+
+      .direction-long {
+        background: #1a4731;
+        color: #3fb950;
+      }
+
+      .direction-short {
+        background: #3d1f1f;
+        color: #f85149;
+      }
+
+      /* P&L color classes — read by unit tests */
+      .pnl-positive {
+        color: #3fb950;
+        font-weight: 600;
+      }
+
+      .pnl-negative {
+        color: #f85149;
+        font-weight: 600;
+      }
+
+      .positions-empty {
+        color: #8b949e;
+        font-style: italic;
+        padding: 8px 6px;
+        font-size: 12px;
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* Signal feed                                                          */
+      /* ------------------------------------------------------------------ */
+      #signal-feed-list {
+        list-style: none;
+        max-height: 220px;
+        overflow-y: auto;
+      }
+
+      .signal-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding: 6px 8px;
+        border-radius: 6px;
+        margin-bottom: 4px;
+        background: #161b22;
+        border: 1px solid #21262d;
+        gap: 8px;
+      }
+
+      .signal-meta {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .signal-strategy {
+        font-weight: 600;
+        font-size: 12px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .signal-timestamp {
+        font-size: 10px;
+        color: #8b949e;
+        margin-top: 2px;
+      }
+
+      .signal-status-text {
+        font-size: 11px;
+        color: #8b949e;
+        margin-top: 2px;
+        font-style: italic;
+      }
+
+      .signal-score {
+        font-size: 14px;
+        font-weight: 700;
+        min-width: 32px;
+        text-align: right;
+      }
+
+      .signal-score-high {
+        color: #3fb950;
+      }
+
+      .signal-score-mid {
+        color: #d29922;
+      }
+
+      .signal-score-low {
+        color: #f85149;
+      }
+
+      .signal-status-badge {
+        display: inline-block;
+        font-size: 10px;
+        padding: 1px 5px;
+        border-radius: 3px;
+        margin-left: 6px;
+      }
+
+      .status-active {
+        background: #1a4731;
+        color: #3fb950;
+      }
+
+      .status-rejected {
+        background: #3d1f1f;
+        color: #f85149;
+      }
+
+      .status-expired {
+        background: #21262d;
+        color: #8b949e;
+      }
+
+      .signal-feed-empty {
+        color: #8b949e;
+        font-style: italic;
+        font-size: 12px;
+        padding: 8px;
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* Alert queue                                                          */
+      /* ------------------------------------------------------------------ */
+      #alert-queue-list {
+        list-style: none;
+      }
+
+      .alert-item {
+        background: #3d1a1a;
+        border: 1px solid #f8514940;
+        border-radius: 6px;
+        padding: 8px 10px;
+        margin-bottom: 6px;
+      }
+
+      .alert-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 4px;
+      }
+
+      .alert-title {
+        font-weight: 700;
+        font-size: 12px;
+        color: #f85149;
+      }
+
+      .alert-priority-badge {
+        font-size: 10px;
+        font-weight: 700;
+        padding: 1px 5px;
+        border-radius: 3px;
+        background: #f85149;
+        color: #0d1117;
+      }
+
+      .alert-message {
+        font-size: 12px;
+        color: #c9d1d9;
+        margin-bottom: 8px;
+        line-height: 1.4;
+      }
+
+      .alert-ack-btn {
+        background: #f85149;
+        color: #0d1117;
+        border: none;
+        border-radius: 4px;
+        padding: 4px 10px;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: opacity 0.15s;
+      }
+
+      .alert-ack-btn:hover {
+        opacity: 0.85;
+      }
+
+      .alert-queue-empty {
+        color: #8b949e;
+        font-style: italic;
+        font-size: 12px;
+        padding: 8px;
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* Scrollbar                                                            */
+      /* ------------------------------------------------------------------ */
+      ::-webkit-scrollbar {
+        width: 4px;
+        height: 4px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: #0d1117;
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: #30363d;
+        border-radius: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- ---------------------------------------------------------------- -->
+    <!-- Section 1: Live Positions                                          -->
+    <!-- ---------------------------------------------------------------- -->
+    <section id="positions-section" aria-label="Live positions">
+      <h2>Live Positions</h2>
+      <div id="positions-table-wrapper">
+        <table id="positions-table" role="table" aria-live="polite">
+          <thead>
+            <tr>
+              <th scope="col">Symbol</th>
+              <th scope="col">Dir</th>
+              <th scope="col">Entry ₹</th>
+              <th scope="col">Current ₹</th>
+              <th scope="col">Unrealised P&amp;L</th>
+            </tr>
+          </thead>
+          <tbody id="positions-tbody">
+            <tr>
+              <td colspan="5" class="positions-empty">No open positions</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ---------------------------------------------------------------- -->
+    <!-- Section 2: Signal Feed                                             -->
+    <!-- ---------------------------------------------------------------- -->
+    <section id="signal-section" aria-label="Recent signals">
+      <h2>Recent Signals <span id="signal-count" aria-live="polite"></span></h2>
+      <ul id="signal-feed-list" aria-label="Last 10 signals" aria-live="polite">
+        <li class="signal-feed-empty">No signals yet</li>
+      </ul>
+    </section>
+
+    <!-- ---------------------------------------------------------------- -->
+    <!-- Section 3: Alert Queue (MAX-priority only)                        -->
+    <!-- ---------------------------------------------------------------- -->
+    <section id="alert-section" aria-label="Alert queue">
+      <h2>
+        Alert Queue
+        <span id="alert-count" aria-live="assertive"></span>
+      </h2>
+      <ul id="alert-queue-list" aria-label="MAX-priority alerts requiring acknowledgment" aria-live="assertive">
+        <li class="alert-queue-empty">No pending alerts</li>
+      </ul>
+    </section>
+
+    <script src="sidepanel.js"></script>
+  </body>
+</html>

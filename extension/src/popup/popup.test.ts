@@ -1,4 +1,6 @@
 /**
+ * @jest-environment jsdom
+ *
  * Popup unit tests (8 tests).
  *
  * Tests verify the two-step ARM/DISARM UI rules (Requirements 1.1, 11.1):
@@ -229,17 +231,26 @@ describe('Popup UI — ARM/DISARM two-step flow', () => {
 describe('Popup button message dispatch', () => {
   it('handleActivate sends REQUEST_ARM to the BSW', () => {
     handleActivate();
-    expect(sendMessageMock).toHaveBeenCalledWith({ type: 'REQUEST_ARM' });
+    expect(sendMessageMock).toHaveBeenCalledWith(
+      { type: 'REQUEST_ARM' },
+      expect.any(Function),
+    );
   });
 
   it('handleConfirm sends CONFIRM_ARM to the BSW', () => {
     handleConfirm();
-    expect(sendMessageMock).toHaveBeenCalledWith({ type: 'CONFIRM_ARM' });
+    expect(sendMessageMock).toHaveBeenCalledWith(
+      { type: 'CONFIRM_ARM' },
+      expect.any(Function),
+    );
   });
 
   it('handleDisarm sends DISARM to the BSW', () => {
     handleDisarm();
-    expect(sendMessageMock).toHaveBeenCalledWith({ type: 'DISARM' });
+    expect(sendMessageMock).toHaveBeenCalledWith(
+      { type: 'DISARM' },
+      expect.any(Function),
+    );
   });
 });
 

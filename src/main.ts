@@ -44,6 +44,25 @@ async function bootstrap(): Promise<void> {
     // Connections succeeded — cancel the deadline timer.
     clearTimeout(timeoutHandle);
 
+    // CORS — allow Chrome extensions and localhost origins.
+    // In production, restrict `chrome-extension://*` to known extension IDs.
+    app.enableCors({
+      origin: (origin, callback) => {
+        // Allow requests with no origin (mobile apps, curl, Postman)
+        if (!origin) return callback(null, true);
+        // Allow any Chrome extension origin
+        if (origin.startsWith('chrome-extension://')) return callback(null, true);
+        // Allow localhost on any port (dev servers, tests)
+        if (origin.startsWith('http://localhost') || origin.startsWith('https://localhost')) {
+          return callback(null, true);
+        }
+        callback(new Error(`CORS: origin '${origin}' is not allowed`), false);
+      },
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
+    });
+
     // Enable DTO validation globally.  `whitelist: true` strips unknown
     // properties; `transform: true` coerces plain objects into DTO class
     // instances so class-validator decorators fire correctly.

@@ -33,4 +33,14 @@ declare const chrome: {
       ): void;
     };
   };
+  tabs: {
+    query(
+      queryInfo: { active?: boolean; currentWindow?: boolean },
+      callback: (tabs: Array<{ windowId: number; id?: number }>) => void,
+    ): void;
+  };
+  sidePanel: {
+    open(options: { windowId: number; tabId?: number }): Promise<void>;
+    setPanelBehavior(behavior: { openPanelOnActionClick?: boolean }): Promise<void>;
+  };
 };

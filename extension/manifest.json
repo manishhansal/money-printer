@@ -5,14 +5,22 @@
   "description": "Autonomous trading control plane for the MoneyPrinter CloudEngine. Communicates over WSS/HTTPS exclusively.",
   "permissions": [
     "storage",
-    "alarms"
+    "alarms",
+    "sidePanel",
+    "tabs"
+  ],
+  "host_permissions": [
+    "http://localhost/*",
+    "https://localhost/*"
   ],
   "background": {
-    "service_worker": "dist/background/service-worker.js",
-    "type": "module"
+    "service_worker": "dist/background/background.js"
   },
   "action": {
-    "default_popup": "popup.html",
+    "default_popup": "dist/popup/popup.html",
     "default_title": "MoneyPrinter"
+  },
+  "side_panel": {
+    "default_path": "dist/sidepanel/sidepanel.html"
   }
 }

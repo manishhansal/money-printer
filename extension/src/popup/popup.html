@@ -167,6 +167,82 @@
         background: #c62828;
       }
 
+      #sidepanel-btn {
+        background: #1a1a2e;
+        color: #9e9e9e;
+        border: 1px solid #2d2d4e;
+        font-size: 11px;
+      }
+
+      #sidepanel-btn:hover {
+        background: #2d2d4e;
+        color: #e0e0e0;
+      }
+
+      /* ── Settings panel ── */
+      .settings-panel {
+        margin-top: 10px;
+        border-top: 1px solid #2d2d4e;
+        padding-top: 10px;
+      }
+
+      .settings-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        margin-bottom: 6px;
+      }
+
+      .settings-label {
+        color: #9e9e9e;
+        font-size: 11px;
+        white-space: nowrap;
+      }
+
+      .settings-input {
+        width: 90px;
+        background: #0d0d1a;
+        border: 1px solid #2d2d4e;
+        border-radius: 4px;
+        color: #e0e0e0;
+        font-size: 11px;
+        padding: 3px 6px;
+        text-align: right;
+      }
+
+      .settings-input:focus {
+        outline: none;
+        border-color: #0d47a1;
+      }
+
+      .settings-hint {
+        color: #616161;
+        font-size: 10px;
+        text-align: right;
+        margin-top: -4px;
+        margin-bottom: 4px;
+      }
+
+      #save-settings-btn {
+        background: #0d47a1;
+        color: #ffffff;
+        font-size: 11px;
+        margin-top: 2px;
+      }
+
+      #save-settings-btn:not(:disabled):hover {
+        background: #1565c0;
+      }
+
+      #settings-status {
+        font-size: 10px;
+        text-align: center;
+        color: #4caf50;
+        min-height: 14px;
+        margin-top: 2px;
+      }
+
       .hidden {
         display: none !important;
       }
@@ -207,24 +283,25 @@
 
     <!-- Action buttons: two-step ARM / single-step DISARM -->
     <div class="actions">
-      <!--
-        Step 1 — Activate:
-          disabled when armedState is ARMED_PENDING or ARMED
-          (prevents single-action arming)
-      -->
       <button id="activate-btn" type="button">Activate Live Mode</button>
-
-      <!--
-        Step 2 — Confirm:
-          visible and enabled ONLY when armedState is ARMED_PENDING
-      -->
       <button id="confirm-btn" type="button" class="hidden">Confirm Arm</button>
-
-      <!--
-        Disarm:
-          visible when armedState is ARMED or ARMED_PENDING
-      -->
       <button id="disarm-btn" type="button" class="hidden">Disarm</button>
+      <button id="sidepanel-btn" type="button">Open Dashboard →</button>
+    </div>
+
+    <!-- Settings panel -->
+    <div class="settings-panel">
+      <div class="settings-row">
+        <span class="settings-label">Paper Capital (₹)</span>
+        <input id="paper-capital-input" class="settings-input" type="number" min="10000" step="1000" value="50000" />
+      </div>
+      <div class="settings-hint" id="risk-hint">Risk/trade: ₹500 · Daily limit: ₹1,000</div>
+      <div class="settings-row">
+        <span class="settings-label">Risk per trade (%)</span>
+        <input id="risk-pct-input" class="settings-input" type="number" min="0.1" max="5" step="0.1" value="1.0" />
+      </div>
+      <button id="save-settings-btn" type="button">Save Settings</button>
+      <div id="settings-status"></div>
     </div>
 
     <script src="popup.js"></script>

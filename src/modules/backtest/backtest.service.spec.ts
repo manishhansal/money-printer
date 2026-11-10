@@ -25,6 +25,7 @@ import { BadRequestException } from '@nestjs/common';
 
 import { BacktestService } from './backtest.service';
 import { BacktestConfig, BacktestTrade } from './backtest.types';
+import { TradingChargesService } from '../charges/trading-charges.service';
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -63,7 +64,7 @@ describe('BacktestService', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [BacktestService],
+      providers: [BacktestService, TradingChargesService],
     }).compile();
 
     service = module.get<BacktestService>(BacktestService);

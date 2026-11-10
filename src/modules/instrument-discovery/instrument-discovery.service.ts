@@ -49,6 +49,23 @@ import { NotificationAlert } from '../notification/notification.types';
 // ---------------------------------------------------------------------------
 
 /**
+ * NSE/BSE indices whose options are eligible for trading.
+ * Any INDEX_OPTION whose underlying is NOT in this list is blocked.
+ */
+export const ALLOWED_INDEX_UNDERLYINGS = [
+  'NIFTY',       // Nifty 50
+  'BANKNIFTY',   // Bank Nifty
+  'FINNIFTY',    // Nifty Financial Services
+  'MIDCPNIFTY',  // Nifty Midcap Select
+  'SENSEX',      // BSE Sensex
+  'BANKEX',      // BSE Bankex
+  'NIFTYNXT50',  // Nifty Next 50
+] as const;
+
+/** Segments that are allowed for STOCK_OPTION instruments. */
+export const ALLOWED_FNO_SEGMENTS = ['NSE_FNO', 'BSE_FNO'] as const;
+
+/**
  * High-level instrument classification used by the discovery service.
  *
  * - UNDERLYING    — an index used for directional signal computation only.
@@ -377,20 +394,26 @@ export class InstrumentDiscoveryService {
     minOiThreshold: number,
     minAdvThreshold: number,
   ): boolean {
-    // Index options (NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY, SENSEX) are always eligible.
+    // ── INDEX_OPTION: only allow the configured index underlyings ─────────
+    // Nifty, BankNifty, FinNifty, MidcpNifty, Sensex, Bankex, NiftyNxt50.
     if (instrument.instrumentType === 'INDEX_OPTION') {
-      return true;
+      return (ALLOWED_INDEX_UNDERLYINGS as readonly string[]).includes(instrument.underlying);
     }
 
-    // Futures are always eligible.
+    // ── FUTURES are blocked — bot trades options buying only ──────────────
     if (
       instrument.instrumentType === 'INDEX_FUTURE' ||
       instrument.instrumentType === 'STOCK_FUTURE'
     ) {
-      return true;
+      return false;
     }
 
-    // STOCK_OPTION: enforce global OI and ADV invariants (Requirement 4.8).
+    // ── STOCK_OPTION: must be from NSE_FNO or BSE_FNO segment ─────────────
+    if (!(ALLOWED_FNO_SEGMENTS as readonly string[]).includes(instrument.segment)) {
+      return false;
+    }
+
+    // ── STOCK_OPTION: enforce global OI and ADV invariants (Requirement 4.8)
     // When both thresholds are 0 (unconfigured), admit all stock options.
     if (minOiThreshold === 0 && minAdvThreshold === 0) {
       return true;

@@ -71,7 +71,7 @@ export class UserSettings {
     type: 'numeric',
     precision: 15,
     scale: 2,
-    default: '100000.00',
+    default: '50000.00',
   })
   paperStartingCapital!: string;
 

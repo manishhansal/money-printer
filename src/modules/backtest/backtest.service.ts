@@ -20,6 +20,7 @@
  */
 
 import { Injectable, BadRequestException } from '@nestjs/common';
+import { TradingChargesService } from '../charges/trading-charges.service';
 
 import {
   BacktestConfig,
@@ -40,6 +41,8 @@ export class BacktestService {
 
   /** Bootstrap iteration count — must be ≥ 1,000 (Requirement 15.4). */
   private static readonly BOOTSTRAP_ITERATIONS = 1_000;
+
+  constructor(private readonly chargesService: TradingChargesService) {}
 
   // ---------------------------------------------------------------------------
   // Public API
@@ -172,32 +175,12 @@ export class BacktestService {
   /**
    * Calculate all trading costs for a round-trip options trade.
    *
-   * This is an exact copy of PaperTradingService.calculateTradingCosts()
-   * to guarantee cost-model parity (Requirement 15.2).
-   *
-   * Cost components:
-   *  - Brokerage:       ₹20 flat per side → ₹40 total
-   *  - STT:             0.05% of sell-side turnover
-   *  - Exchange charges: 0.053% of total turnover (buy + sell)
-   *  - GST:             18% of (brokerage + exchange charges)
-   *  - SEBI charges:    ₹10 per crore (turnover × 0.000001)
-   *  - Stamp duty:      0.003% of buy-side turnover only
+   * Delegates to the shared TradingChargesService (single source of truth,
+   * correct STT rate 0.1% per Budget 2024). Maintained as a public method
+   * for cost-model parity with the paper engine (Requirement 15.2).
    */
   calculateTradingCosts(entryPrice: number, exitPrice: number, quantity: number): TradingCosts {
-    const buyTurnover = entryPrice * quantity;
-    const sellTurnover = exitPrice * quantity;
-    const totalTurnover = buyTurnover + sellTurnover;
-
-    const brokerage = 40; // ₹20 flat per side × 2 sides
-    const stt = sellTurnover * 0.0005;
-    const exchangeCharges = totalTurnover * 0.00053;
-    const gst = (brokerage + exchangeCharges) * 0.18;
-    const sebiCharges = totalTurnover * 0.000001;
-    const stampDuty = buyTurnover * 0.00003;
-
-    const total = brokerage + stt + exchangeCharges + gst + sebiCharges + stampDuty;
-
-    return { brokerage, stt, exchangeCharges, gst, sebiCharges, stampDuty, total };
+    return this.chargesService.calculate(entryPrice, exitPrice, quantity);
   }
 
   // ---------------------------------------------------------------------------

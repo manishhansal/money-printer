@@ -17,7 +17,10 @@ import { saveState, loadState } from './state.manager';
 // ─── Configurable constants ────────────────────────────────────────────────────
 
 /** Default CloudEngine WebSocket endpoint (configurable for testing). */
-export const DEFAULT_WSS_URL = 'wss://localhost:3000';
+export const DEFAULT_WSS_URL = 'ws://localhost:3003';
+
+/** HTTP base URL for CloudEngine REST API calls. */
+export const DEFAULT_HTTP_URL = 'http://localhost:3002';
 
 /** Maximum time (ms) allowed to recover state from chrome.storage.session on startup. */
 export const RECOVERY_TIMEOUT_MS = 5000;
@@ -86,6 +89,9 @@ export async function recoverState(timeoutMs: number = RECOVERY_TIMEOUT_MS): Pro
         armedState: 'DISARMED', // Never auto-re-arm
         sessionToken: result.sessionToken, // Preserved for re-authentication
         connectionState: 'disconnected', // Fresh WSS connection will be established
+        sessionPnl: 0,
+        activePositionsCount: 0,
+        healthStatus: 'Healthy',
       };
     } else {
       // ── No stored state (first run or session cleared) ────────────────────
@@ -174,6 +180,108 @@ export function _resetStateForTesting(): void {
 }
 
 // ─── MV3 Background Service Worker event registrations ────────────────────────
+
+/**
+ * Handle messages from the popup and side panel.
+ *
+ * GET_STATE  → fetch latest P&L from CloudEngine and return full ExtensionState.
+ * REQUEST_ARM / CONFIRM_ARM / DISARM → delegate to LiveTradingService via HTTP.
+ */
+chrome.runtime.onMessage.addListener(
+  (message: { type: string }, _sender, sendResponse: (state: unknown) => void) => {
+    if (message.type === 'GET_STATE') {
+      // Fetch session P&L from CloudEngine, then return merged state.
+      fetchSessionPnl()
+        .then((pnl) => {
+          sendResponse({ ...currentState, ...pnl });
+        })
+        .catch(() => {
+          sendResponse({
+            ...currentState,
+            sessionPnl: 0,
+            activePositionsCount: 0,
+            healthStatus: 'Down' as const,
+          });
+        });
+      return true;
+    }
+
+    if (message.type === 'REQUEST_ARM') {
+      // Step 1 of two-step arm: DISARMED → ARMED_PENDING
+      updateState({ armedState: 'ARMED_PENDING' })
+        .then(() => sendResponse({ ...currentState }))
+        .catch(() => sendResponse({ ...currentState }));
+      return true;
+    }
+
+    if (message.type === 'CONFIRM_ARM') {
+      // Step 2: ARMED_PENDING → ARMED
+      updateState({ armedState: 'ARMED' })
+        .then(() => sendResponse({ ...currentState }))
+        .catch(() => sendResponse({ ...currentState }));
+      return true;
+    }
+
+    if (message.type === 'DISARM') {
+      // Reset to safe state from any armed state
+      updateState({ armedState: 'DISARMED' })
+        .then(() => sendResponse({ ...currentState }))
+        .catch(() => sendResponse({ ...currentState }));
+      return true;
+    }
+
+    if (message.type === 'OPEN_SIDE_PANEL') {
+      // Open the side panel for the current window
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]?.windowId) {
+          (chrome.sidePanel as unknown as { open: (opts: { windowId: number }) => Promise<void> })
+            .open({ windowId: tabs[0].windowId })
+            .then(() => sendResponse({ ok: true }))
+            .catch(() => sendResponse({ ok: false }));
+        } else {
+          sendResponse({ ok: false });
+        }
+      });
+      return true;
+    }
+  },
+);
+
+/**
+ * Fetch the current session P&L summary from GET /portfolio/summary.
+ * Uses the PAPER engine summary (live starts at 0 until armed).
+ */
+async function fetchSessionPnl(): Promise<{
+  sessionPnl: number;
+  activePositionsCount: number;
+  healthStatus: 'Healthy' | 'Degraded' | 'Down';
+}> {
+  const token = currentState.sessionToken;
+  const baseUrl = DEFAULT_HTTP_URL;
+
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const res = await fetch(`${baseUrl}/portfolio/summary`, { headers });
+  if (!res.ok) {
+    return { sessionPnl: 0, activePositionsCount: 0, healthStatus: 'Degraded' };
+  }
+
+  const data = (await res.json()) as {
+    paper: { netPnl: number };
+    live: { netPnl: number };
+  };
+
+  // Show live P&L when armed, paper P&L otherwise.
+  const isLive = currentState.armedState === 'ARMED';
+  const netPnl = isLive ? (data.live?.netPnl ?? 0) : (data.paper?.netPnl ?? 0);
+
+  return {
+    sessionPnl: netPnl,
+    activePositionsCount: 0, // Extended in future via /portfolio/positions
+    healthStatus: 'Healthy',
+  };
+}
 
 chrome.runtime.onInstalled.addListener(async () => {
   await recoverState();

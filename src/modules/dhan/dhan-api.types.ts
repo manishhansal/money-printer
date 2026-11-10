@@ -497,3 +497,51 @@ export interface DhanErrorResponse {
   errorCode: string;
   errorMessage: string;
 }
+
+// ---------------------------------------------------------------------------
+// Kill Switch
+// ---------------------------------------------------------------------------
+
+/** Response from POST /v2/killswitch or GET /v2/killswitch. */
+export interface DhanKillSwitchResponse {
+  dhanClientId: string;
+  /**
+   * POST response: descriptive message e.g. "Kill Switch has been successfully activated".
+   * GET response: 'ACTIVATE' | 'DEACTIVATE'.
+   */
+  killSwitchStatus: string;
+}
+
+// ---------------------------------------------------------------------------
+// P&L Based Auto-Exit
+// ---------------------------------------------------------------------------
+
+/** Request body for POST /v2/pnlExit. */
+export interface DhanPnlExitRequest {
+  /** Target profit in INR — exit all positions when cumulative P&L reaches this value. */
+  profitValue: string;
+  /** Target loss in INR — exit all positions when cumulative P&L falls to -lossValue. */
+  lossValue: string;
+  /** Product types to apply the rule to. */
+  productType: Array<'INTRADAY' | 'DELIVERY'>;
+  /**
+   * When true, Dhan will also activate the account-level kill switch after
+   * exiting positions (prevents new orders for the rest of the day).
+   */
+  enableKillSwitch: boolean;
+}
+
+/** Response from POST /v2/pnlExit or DELETE /v2/pnlExit. */
+export interface DhanPnlExitResponse {
+  pnlExitStatus: 'ACTIVE' | 'INACTIVE' | 'DISABLED';
+  message: string;
+}
+
+/** Response from GET /v2/pnlExit. */
+export interface DhanPnlExitGetResponse {
+  pnlExitStatus: 'ACTIVE' | 'INACTIVE';
+  profit: string;
+  loss: string;
+  productType: Array<'INTRADAY' | 'DELIVERY'>;
+  enable_kill_switch: boolean;
+}

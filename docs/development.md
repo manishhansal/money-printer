@@ -2,238 +2,219 @@
 
 ## Project Structure
 
-The repository has two independently buildable sub-projects:
-
 ```
 money-printer/
-├── src/                        # NestJS CloudEngine
-│   ├── app.module.ts           # Root module; registers global guards, filters, middleware
-│   ├── main.ts                 # Bootstrap with 10-second startup timeout guard
-│   ├── common/                 # Cross-cutting concerns
-│   │   ├── filters/            # GlobalExceptionFilter, ThrottlerExceptionFilter
-│   │   ├── guards/             # ThrottleByUserGuard
-│   │   ├── middleware/         # CsrfMiddleware
-│   │   └── transformers/       # EncryptedColumnTransformer (AES-256-GCM)
+├── src/                          # NestJS CloudEngine (TypeScript)
+│   ├── app.module.ts             # Root module; registers all feature modules, global guards/filters
+│   ├── main.ts                   # Bootstrap: 10s startup timeout, CORS, validation pipe
+│   ├── common/
+│   │   ├── filters/              # GlobalExceptionFilter, ThrottlerExceptionFilter
+│   │   ├── guards/               # ThrottleByUserGuard (APP_GUARD)
+│   │   ├── middleware/           # CsrfMiddleware
+│   │   └── transformers/         # EncryptedColumnTransformer (AES-256-GCM)
 │   ├── database/
-│   │   ├── data-source.ts      # TypeORM DataSource for migration CLI
-│   │   └── entities/           # 24+ TypeORM entity classes
-│   └── modules/                # Feature modules (one directory per domain)
+│   │   ├── data-source.ts        # TypeORM DataSource used by both NestJS and migration CLI
+│   │   └── entities/             # 25+ TypeORM entity classes
+│   ├── migrations/               # TypeORM migration files (compiled to dist/migrations/ by tsc)
+│   │   ├── 1700000000000-EnablePostgresExtensions.ts
+│   │   └── 1794321588593-CreateFullSchema.ts
+│   └── modules/                  # Feature modules (one directory per domain)
 │       ├── auth/
-│       ├── signal-scoring/
+│       ├── backtest/
+│       ├── charges/              # TradingChargesService — single source of NSE F&O charge rates
+│       ├── compliance/
+│       ├── dhan/                 # DhanApiClient (25 methods) + DhanWebSocketClient
+│       ├── event-wiring/         # Redis channel and EventEmitter2 wiring
+│       ├── execution/
+│       ├── instrument-discovery/ # 09:15 IST scan; options-only allowlists
+│       ├── live-trading/         # Two-step arm, kill switch, broker P&L exit
+│       ├── market-data/
+│       ├── market-regime/
+│       ├── notification/
+│       ├── options-flow/
+│       ├── options-intelligence/ # Greeks cache, IV regime, getActiveExpiries()
+│       ├── paper-trading/        # Fully isolated; options-buying only; configurable capital
+│       ├── portfolio/            # PortfolioService, PortfolioController, SettingsController
+│       ├── position-monitoring/  # Tick monitoring, greedy trailing, MFE/MAE
+│       ├── reconciliation/
+│       ├── redis/
 │       ├── risk-management/
-│       ├── ...
-│       └── event-wiring/       # Redis channel and EventEmitter2 wiring
-├── extension/                  # Chrome Extension MV3
-│   ├── manifest.json
+│       ├── secrets/
+│       ├── session-manager/
+│       ├── signal-scoring/
+│       ├── strategy/
+│       ├── system-health-monitor/
+│       ├── technical-analysis/
+│       ├── trade-journal/
+│       └── trailing-stop/        # 8 mechanisms including PARTIAL_PROFIT (greedy trail)
+├── extension/                    # Chrome Extension MV3
+│   ├── manifest.json             # Declares sidePanel, tabs, storage, alarms permissions
+│   ├── build.mjs                 # esbuild bundler script (outputs to extension/dist/)
+│   ├── dist/                     # Built extension (committed; load this folder in Chrome)
 │   ├── src/
-│   │   ├── background/         # Background Service Worker
-│   │   ├── popup/              # Popup UI (two-step ARM/DISARM)
-│   │   ├── sidepanel/          # Side panel (positions, signals, alerts)
-│   │   ├── dashboard/          # Full dashboard (analytics, options flow)
-│   │   └── security/           # Security invariant helpers
-│   └── jest.config.js
-└── migrations/                 # TypeORM migration files
+│   │   ├── background/           # BSW: state, WSS, GET_STATE/ARM/DISARM/OPEN_SIDE_PANEL
+│   │   ├── popup/                # Popup: ARM/DISARM controls + settings panel
+│   │   ├── sidepanel/            # Live position monitor, signal feed
+│   │   ├── dashboard/            # Full analytics and options flow
+│   │   └── security/             # assertSecureUrl(), secureLocalStorageSet()
+│   ├── jest.config.js
+│   └── jest.setup.ts
+├── docs/                         # Documentation (7 files)
+├── .kiro/hooks/                  # Kiro live-watch hook (auto type-check + lint on save)
+└── docker-compose.yml            # PostgreSQL 15 (port 5435) + Redis 7 (port 6380)
 ```
 
 ---
 
 ## Module Conventions
 
-Every feature module follows this file layout:
+Every feature module follows this layout:
 
 ```
 src/modules/{name}/
-  {name}.types.ts      — shared types, interfaces, enums, event name constants
-  {name}.service.ts    — business logic implementation
-  {name}.module.ts     — NestJS module class (imports, providers, exports)
-  {name}.service.spec.ts  — unit tests
+  {name}.types.ts        — shared types, interfaces, enums, event-name constants
+  {name}.service.ts      — business logic
+  {name}.module.ts       — NestJS module (imports, providers, exports)
+  {name}.service.spec.ts — unit tests
 ```
 
-Modules with REST endpoints add `{name}.controller.ts`. Modules with multiple services add additional `{name2}.service.ts` / `{name2}.service.spec.ts` pairs within the same directory.
-
-**Types file** is the first thing to write when adding a new module. It defines the contracts (interfaces, enums, event names) that other modules depend on, and keeps circular import risk minimal by importing from other modules' types files rather than their service files.
-
-**Module file** imports only what the service needs. Prefer injecting from global modules (RedisModule, SecretsModule, NotificationModule are global) rather than re-importing them. Register the service in `providers`, export it if other modules will inject it.
+Modules with REST endpoints add `{name}.controller.ts`. The `portfolio` module has two controllers: `portfolio.controller.ts` (P&L summary) and `settings.controller.ts` (trading config).
 
 ---
 
 ## Adding a New Module
 
-1. Create `src/modules/{name}/` and add the four convention files.
-2. Write types first — settle on the public interface before the implementation.
-3. Implement the service, injecting any required repositories via `@InjectRepository` and global services via constructor injection.
-4. Register the module class in `AppModule.imports` (or as a dependency of an existing module).
-5. Write unit tests in `{name}.service.spec.ts`. Use `@nestjs/testing`'s `Test.createTestingModule()`.
-6. Run `npm run typeorm -- migration:generate -d src/database/data-source.ts migrations/{description}` if the module adds new entities.
+1. Create `src/modules/{name}/` and add the convention files.
+2. Write `{name}.types.ts` first — settle on the public interface before the implementation.
+3. Implement the service with constructor injection.
+4. Register the module in `AppModule.imports` (or as a dependency of an existing module).
+5. Write unit tests. Use `@nestjs/testing`'s `Test.createTestingModule()`.
+6. If new entities are needed: `npm run migration:generate src/migrations/Description`.
 
 ---
 
 ## TypeScript Configuration
 
-TypeScript strict mode is enabled. Relevant flags in `tsconfig.json`:
-
-- `strict: true` — enables `noImplicitAny`, `strictNullChecks`, `strictFunctionTypes`, and others
-- `noImplicitAny: true`
-- `strictNullChecks: true`
-
-Before submitting changes, verify there are no type errors:
+TypeScript 5.7.3 is required (NestJS 10 is incompatible with TS 6.x).
 
 ```bash
+# Check type errors (whole project)
 npx tsc --noEmit
+
+# Check extension only
+npx tsc --noEmit -p extension/tsconfig.json
 ```
 
-TypeORM entities use `!` definite assignment assertions (e.g. `id!: string`) because TypeORM hydrates properties at runtime rather than through constructors. This is expected and intentional — do not remove them.
-
-Monetary amounts that come from PostgreSQL `NUMERIC` columns are typed as `string` to prevent IEEE-754 floating-point precision loss. Never cast them to `number` without explicit intent.
+The extension uses a separate `extension/tsconfig.json` with `outDir: ./dist`. It is bundled by **esbuild** (not tsc directly) for the browser target.
 
 ---
 
-## Event Bus Architecture
+## Building the Chrome Extension
 
-Two event mechanisms are used. Choosing the right one matters for coupling and performance.
-
-### Redis pub/sub — cross-module realtime data
-
-Use for data that must cross module or process boundaries in realtime:
-
-| Channel | Use case |
-|---|---|
-| `events:tick:{instrument_id}` | Live market tick from DhanWebSocketClient to position monitoring, technical analysis, options intelligence |
-| `events:regime_change` | Regime transition broadcast to strategy, risk, live trading modules |
-| `events:session_phase` | Session phase transition to all trading-aware modules |
-| `events:paper:*` | Paper engine event isolation namespace |
-
-Publishing uses `RedisService.publish(channel, JSON.stringify(payload))`. Subscribing uses `RedisService.subscribe(channel, handler)` — the pub/sub client is a dedicated `ioredis` instance that cannot run regular commands while in subscribed mode.
-
-### NestJS EventEmitter2 — intra-process domain events
-
-Use for events that connect services within the same process without needing cross-process fan-out:
-
-| Event | Emitter | Handler |
-|---|---|---|
-| `strategy.signal.candidate` | `StrategyService` | `PipelineWiringService` → `SignalScoringService` |
-| `risk.unrealized_pnl_updated` | `PositionMonitoringService` | `PipelineWiringService` → `DailyLossStateMachineService` |
-| `position.exit` | `PositionMonitoringService` | `JournalWiringService` → `TradeJournalService` |
-| `risk.daily_loss_state_changed` | `DailyLossStateMachineService` | `JournalWiringService` → `TradeJournalService` |
-| `vix.position.size.restored` | `VixPositionSizeService` | `RiskManagementService` |
-| `market.regime.changed` | `MarketRegimeService` | `StrategyService`, `RiskManagementService` |
-| `session.phase.changed` | `SessionManagerService` | `StrategyService`, `LiveTradingService` |
-
-EventEmitter2 event names are defined as string constants in the module's `types.ts` file (e.g. `REGIME_CHANGED_EVENT = 'market.regime.changed'`). Never use magic strings directly in `emit()` or `@OnEvent()` decorators.
-
----
-
-## Testing
-
-### Running tests
+The extension TypeScript is bundled with esbuild into `extension/dist/`. The dist is committed to git so Chrome can load it without a build step. After any source change, rebuild:
 
 ```bash
-npm test               # All CloudEngine unit tests (1,442 tests), run serially
-npm run test:extension # Chrome Extension unit tests
-npm run test:cov       # Coverage report (HTML + lcov in coverage/)
+npm run build:extension          # one-shot build
+npm run build:extension:watch    # watch mode — rebuilds on every .ts save
 ```
 
-To run tests for a single module, use `--testPathPattern`:
-
-```bash
-npx jest --testPathPattern signal-scoring --runInBand
-npx jest --testPathPattern daily-loss-state-machine --runInBand
-```
-
-Tests run with `--runInBand` (serially) because some test suites mock global state. Do not remove this flag.
-
-### Unit test conventions
-
-Tests use `@nestjs/testing`'s `Test.createTestingModule()`. Repositories are mocked by providing `jest.fn()` implementations for the methods under test:
-
-```typescript
-const module = await Test.createTestingModule({
-  providers: [
-    MyService,
-    {
-      provide: getRepositoryToken(MyEntity),
-      useValue: { find: jest.fn(), save: jest.fn() },
-    },
-  ],
-}).compile();
-```
-
-Do not write tests that depend on a live database or Redis instance. The test environment is fully in-memory.
-
-### Property-based tests
-
-Fast-check (`fast-check` package) is used for property-based tests that verify financial invariants. Every property-based test file must:
-
-1. Import `* as fc from 'fast-check'`
-2. Use a minimum of **100 iterations** per property: `{ numRuns: 100 }`
-3. Tag the containing describe block with a comment:
-
-```typescript
-// Feature: money-printer
-// Property 1: net_pnl = gross_pnl - sum(all_charges)
-```
-
-Existing property-based test files:
-- `src/modules/trade-journal/trade-journal-net-pnl.pbt.spec.ts` — P&L calculation invariants
-- `src/modules/market-data/market-data-cache.service.spec.ts` — Redis key derivation invariants
-- `src/modules/risk-management/risk-management.service.spec.ts` — position sizing invariants
+Then reload the extension in Chrome: `chrome://extensions` → MoneyPrinter → ↺ reload.
 
 ---
 
-## Paper vs Live Engine Rules
+## Live Watch Mode (Kiro Hook)
 
-The paper engine is a full simulation that must behave identically to the live engine in signal evaluation, risk gate checks, and cost calculation — but must never touch live infrastructure:
+The `.kiro/hooks/live-watch-mode.json` hook fires on every `.ts` file save. It automatically:
 
-| Rule | Requirement |
-|---|---|
-| Write to `paper_*` tables only | Never INSERT into `orders`, `executions`, `positions`, `trades` from paper code paths |
-| Write to `paper:*` Redis keys only | Never write to keys without the `paper:` prefix from paper code paths |
-| Publish to `events:paper:*` channels only | Never publish to `events:fill`, `events:order`, etc. from paper code paths |
-| Never call `DhanApiClient` | Paper fills are simulated; no real broker API calls |
-| Apply identical NSE cost model | Use the same 6-component cost formula as the live engine |
+1. Runs `npx tsc --noEmit` (whole project)
+2. Runs ESLint on the saved file
+3. Finds and runs the matching `.spec.ts` test
+4. Pings `localhost:3002` to check server health
 
-The paper/live isolation invariants are verified by tests in `src/modules/event-wiring/journal-wiring.service.spec.ts` (tests 3 and 4 specifically check the `paper:` key and channel namespacing).
+Results appear as a compact summary in the Kiro chat. No manual test run needed during development.
 
 ---
 
-## Migration Workflow
-
-Migrations live in `migrations/` and are run by the TypeORM CLI against `src/database/data-source.ts`.
+## Running Tests
 
 ```bash
-# Generate a new migration after changing entities
-npm run migration:generate -- migrations/YourDescriptiveName
+# All 1,442+ unit tests (main project)
+npm test
 
-# Apply pending migrations
+# Single module
+npx jest --testPathPattern="risk-management" --no-coverage
+
+# With coverage
+npm run test:cov
+
+# Chrome Extension tests only (uses extension/jest.config.js)
+npm run test:extension
+
+# Force-exit (useful for tests with timers)
+npx jest --forceExit --no-coverage
+```
+
+---
+
+## Migrations
+
+Migrations live in `src/migrations/` and are compiled to `dist/migrations/` by `npm run build`. The `data-source.ts` uses `join(__dirname, '..', 'migrations', '*.{ts,js}')` which resolves to the right path in both ts-node (src/) and compiled (dist/) contexts.
+
+```bash
+# Apply all pending migrations
 npm run migration:run
 
-# Revert the last migration (destructive — only in development)
+# Generate a new migration from entity changes
+npm run migration:generate src/migrations/MyDescription
+
+# Revert last migration
 npm run migration:revert
 ```
 
-The `synchronize: false` flag in `AppModule`'s TypeORM config is never changed. Schema changes in production always go through migrations, never through auto-sync.
+---
 
-Migrations in `migrations/` are compiled by ts-node at CLI time. The glob `join(__dirname, '..', 'migrations', '*.{ts,js}')` in `AppModule` picks up both `.ts` (ts-node) and `.js` (compiled dist) files.
+## Key Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `PORT` | `3000` | HTTP port |
+| `WS_PORT` | `3001` | WebSocket (NotificationGateway) port |
+| `DATABASE_URL` | — | PostgreSQL connection string |
+| `REDIS_URL` | — | Redis connection string |
+| `DHAN_CLIENT_ID` | — | Dhan API client ID |
+| `DHAN_ACCESS_TOKEN` | — | Dhan API access token (refresh daily) |
+| `JWT_PRIVATE_KEY` | — | RS256 private key (PEM, `\n`-escaped) |
+| `JWT_PUBLIC_KEY` | — | RS256 public key (PEM, `\n`-escaped) |
+| `ENCRYPTION_KEY` | — | AES-256-GCM key (64-char hex) |
+| `DAILY_LOSS_LIMIT_RUPEES` | `10000` | Daily loss limit — triggers EMERGENCY_HALT |
+| `MAX_EXPOSURE_PCT` | `20` | Max total open position exposure (% of capital) |
+| `MIN_OI_THRESHOLD` | `0` | Min OI for F&O stock options to be tradable |
+| `MIN_ADV_THRESHOLD` | `0` | Min ADV for F&O stock options |
+| `GREEDY_FIRST_TARGET_FRACTION` | `0.5` | Partial exit fraction at first target (50%) |
+| `GREEDY_TRAIL_MIN_CONDITIONS` | `2` | Min conditions (of 3) needed to trail after first target |
 
 ---
 
-## Linting and Formatting
+## Charge Calculation Reference
 
-```bash
-npm run lint     # ESLint with auto-fix
-npm run format   # Prettier formatting
-```
+All NSE F&O options charges are centralised in `TradingChargesService` (`src/modules/charges/`). Both `PaperTradingService` and `BacktestService` delegate to it.
 
-ESLint config is in `.eslintrc.js` and extends `@typescript-eslint`. Prettier config is in `.prettierrc`. Both are enforced in CI. The `.prettierignore` file excludes `dist/` and `node_modules/`.
+| Component | Rate | Applied on |
+|---|---|---|
+| Brokerage | ₹20 × 2 = ₹40 | Both legs |
+| STT | **0.1%** (Budget 2024) | Sell leg only |
+| NSE Exchange | 0.053% | Total turnover |
+| GST | 18% | Brokerage + Exchange |
+| SEBI | ₹10/crore | Total turnover |
+| Stamp Duty | 0.003% | Buy leg only |
 
 ---
 
-## Dependency Management
+## Contributing
 
-New dependencies should be pinned to exact versions in `package.json` (or use the lockfile). When adding a dependency, check:
-
-1. Is it actively maintained? (last publish date, open issues)
-2. Is the package name correct? (typosquatting risk)
-3. Does a lighter-weight alternative already exist in the project?
-
-The project uses these primary runtime stacks: NestJS 10, TypeORM 0.3, ioredis 5, `@aws-sdk/client-secrets-manager` v3, `uuid` v10. New dependencies in these domains should be verified against existing versions before introducing alternatives.
+- Match the existing style (NestJS decorators, BigInt arithmetic for money, `satisfies` for event payloads).
+- Add a `.spec.ts` test for every new service method.
+- Never hardcode charge rates — use `TradingChargesService`.
+- Never hardcode starting capital — read from `UserSettings.paperStartingCapital` (default ₹50,000).
+- Options-buying only: `PaperTradingService` blocks SELL orders that would open a SHORT. Any live trading path must respect this.
+- Keep `SECRETS_BACKEND=env` for local dev; switch to `aws` or `vault` for production.
