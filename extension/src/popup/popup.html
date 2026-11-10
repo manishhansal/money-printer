@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MoneyPrinter</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 13px;
+        background: #1a1a2e;
+        color: #e0e0e0;
+        min-width: 260px;
+        padding: 12px;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+        border-bottom: 1px solid #2d2d4e;
+        padding-bottom: 8px;
+      }
+
+      h1 {
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        color: #ffffff;
+      }
+
+      /* ── Health badge ── */
+      .badge {
+        font-size: 10px;
+        font-weight: 600;
+        padding: 2px 7px;
+        border-radius: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+      }
+
+      .badge-healthy {
+        background: #1a4a2e;
+        color: #4caf50;
+        border: 1px solid #4caf50;
+      }
+
+      .badge-degraded {
+        background: #4a3a0a;
+        color: #ff9800;
+        border: 1px solid #ff9800;
+      }
+
+      .badge-down {
+        background: #4a1a1a;
+        color: #f44336;
+        border: 1px solid #f44336;
+      }
+
+      /* ── Info rows ── */
+      .info-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 5px 0;
+      }
+
+      .info-label {
+        color: #9e9e9e;
+        font-size: 11px;
+      }
+
+      .info-value {
+        font-weight: 600;
+        font-size: 12px;
+      }
+
+      /* ── Armed state label ── */
+      #armed-state-label {
+        font-weight: 700;
+        font-size: 12px;
+        letter-spacing: 0.3px;
+      }
+
+      .state-disarmed {
+        color: #9e9e9e;
+      }
+
+      .state-armed-pending {
+        color: #ff9800;
+      }
+
+      .state-armed {
+        color: #4caf50;
+      }
+
+      /* ── P&L colours ── */
+      .pnl-positive {
+        color: #4caf50;
+      }
+
+      .pnl-negative {
+        color: #f44336;
+      }
+
+      .pnl-neutral {
+        color: #9e9e9e;
+      }
+
+      /* ── Action buttons ── */
+      .actions {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-top: 12px;
+        border-top: 1px solid #2d2d4e;
+        padding-top: 10px;
+      }
+
+      button {
+        width: 100%;
+        padding: 7px 12px;
+        border: none;
+        border-radius: 5px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: opacity 0.15s;
+      }
+
+      button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      #activate-btn {
+        background: #0d47a1;
+        color: #ffffff;
+      }
+
+      #activate-btn:not(:disabled):hover {
+        background: #1565c0;
+      }
+
+      #confirm-btn {
+        background: #1b5e20;
+        color: #ffffff;
+      }
+
+      #confirm-btn:not(:disabled):hover {
+        background: #2e7d32;
+      }
+
+      #disarm-btn {
+        background: #b71c1c;
+        color: #ffffff;
+      }
+
+      #disarm-btn:not(:disabled):hover {
+        background: #c62828;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      .divider {
+        height: 1px;
+        background: #2d2d4e;
+        margin: 6px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>MoneyPrinter</h1>
+      <!-- System health badge: Healthy | Degraded | Down -->
+      <span id="health-badge" class="badge badge-healthy">Healthy</span>
+    </header>
+
+    <!-- Armed state label -->
+    <div class="info-row">
+      <span class="info-label">Engine State</span>
+      <span id="armed-state-label" class="info-value state-disarmed">DISARMED</span>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Session P&L -->
+    <div class="info-row">
+      <span class="info-label">Session P&amp;L</span>
+      <span id="session-pnl" class="info-value pnl-neutral">₹0.00</span>
+    </div>
+
+    <!-- Active positions count -->
+    <div class="info-row">
+      <span class="info-label">Active Positions</span>
+      <span id="active-positions-count" class="info-value">0</span>
+    </div>
+
+    <!-- Action buttons: two-step ARM / single-step DISARM -->
+    <div class="actions">
+      <!--
+        Step 1 — Activate:
+          disabled when armedState is ARMED_PENDING or ARMED
+          (prevents single-action arming)
+      -->
+      <button id="activate-btn" type="button">Activate Live Mode</button>
+
+      <!--
+        Step 2 — Confirm:
+          visible and enabled ONLY when armedState is ARMED_PENDING
+      -->
+      <button id="confirm-btn" type="button" class="hidden">Confirm Arm</button>
+
+      <!--
+        Disarm:
+          visible when armedState is ARMED or ARMED_PENDING
+      -->
+      <button id="disarm-btn" type="button" class="hidden">Disarm</button>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

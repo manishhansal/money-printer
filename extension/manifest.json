@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "MoneyPrinter",
+  "version": "0.1.0",
+  "description": "Autonomous trading control plane for the MoneyPrinter CloudEngine. Communicates over WSS/HTTPS exclusively.",
+  "permissions": [
+    "storage",
+    "alarms"
+  ],
+  "background": {
+    "service_worker": "dist/background/service-worker.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "MoneyPrinter"
+  }
+}
