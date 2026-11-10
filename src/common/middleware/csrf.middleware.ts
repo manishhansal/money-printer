@@ -39,7 +39,16 @@ import type { NextFunction, Request, Response } from 'express';
 const STATE_MODIFYING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 /** Paths exempt from CSRF validation (must prefix-match the request path). */
-const EXEMPT_PATH_PREFIXES = ['/health', '/metrics'];
+const EXEMPT_PATH_PREFIXES = [
+  '/health',
+  '/metrics',
+  // Settings and portfolio summary are consumed by the Chrome Extension popup
+  // which cannot access cookies in the service worker context. Both endpoints
+  // are CORS-restricted to chrome-extension://* and localhost origins, so
+  // CSRF provides no additional protection here.
+  '/settings',
+  '/portfolio/summary',
+];
 
 /** Cookie name that stores the CSRF token (must be readable by the client). */
 export const CSRF_COOKIE_NAME = 'csrf-token';
