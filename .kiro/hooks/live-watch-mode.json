@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Live Watch Mode — Type Check, Lint & Test on Save",
+      "trigger": "PostFileSave",
+      "matcher": "\\.(ts|tsx)$",
+      "action": {
+        "type": "agent",
+        "prompt": "A TypeScript file was just saved in the MoneyPrinter project. Run these checks immediately and report findings:\n\n1. **TypeScript type check** (whole project):\n   Run: `cd /Users/manishkumar/Desktop/money-printer && npx tsc --noEmit 2>&1 | head -60`\n   → Report every type error with file, line, and message. If clean, say \"✓ No type errors\".\n\n2. **ESLint** (saved file only, for speed):\n   Run: `cd /Users/manishkumar/Desktop/money-printer && npx eslint \"{SAVED_FILE}\" --max-warnings 0 2>&1 | head -40`\n   where {SAVED_FILE} is the file that was just saved (read from context).\n   → Report every lint violation. If clean, say \"✓ No lint issues\".\n\n3. **Run matching test** (if a .spec.ts exists for the saved file):\n   - If saved file is `src/modules/foo/foo.service.ts`, run its spec: `src/modules/foo/foo.service.spec.ts`\n   - Command: `cd /Users/manishkumar/Desktop/money-printer && npx jest --testPathPattern=\"<spec-file>\" --no-coverage --runInBand 2>&1 | tail -30`\n   → Report pass/fail counts and any failing test names + errors.\n\n4. **Server health** (quick ping, only if server appears to be running):\n   Run: `curl -s --max-time 2 http://localhost:3002/ 2>/dev/null`\n   → If it responds, say \"✓ Server still healthy\". If not, say \"⚠ Server not responding\".\n\nFormat output as a compact summary like:\n```\n📁 Changed: src/modules/auth/auth.service.ts\n✓ TypeScript: clean\n✓ ESLint: clean  \n✓ Tests: 12 passed (auth.service.spec.ts)\n✓ Server: healthy\n```\nOr if there are issues:\n```\n📁 Changed: src/modules/auth/auth.service.ts\n❌ TypeScript: 2 errors\n  - auth.service.ts:45 — Property 'foo' does not exist on type 'Bar'\n✓ ESLint: clean\n❌ Tests: 1 failed — should return 401 for invalid token\n⚠ Server: not responding\n```\nOnly run the checks, do not auto-fix unless the user asks."
+      }
+    }
+  ]
+}
