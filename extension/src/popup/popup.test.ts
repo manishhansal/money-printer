@@ -1,4 +1,6 @@
 /**
+ * @jest-environment jsdom
+ *
  * Popup unit tests (8 tests).
  *
  * Tests verify the two-step ARM/DISARM UI rules (Requirements 1.1, 11.1):
