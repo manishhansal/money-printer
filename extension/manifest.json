@@ -8,11 +8,13 @@
     "alarms"
   ],
   "background": {
-    "service_worker": "dist/background/service-worker.js",
-    "type": "module"
+    "service_worker": "dist/background/background.js"
   },
   "action": {
-    "default_popup": "popup.html",
+    "default_popup": "dist/popup/popup.html",
     "default_title": "MoneyPrinter"
+  },
+  "side_panel": {
+    "default_path": "dist/sidepanel/sidepanel.html"
   }
 }
