@@ -1,0 +1,53 @@
+version: '3.8'
+
+# Local development infrastructure for MoneyPrinter CloudEngine.
+# Starts PostgreSQL 15 and Redis 7 on their standard ports.
+#
+# Usage:
+#   docker compose up -d          # start all services
+#   docker compose down           # stop all services
+#   docker compose down -v        # stop and wipe volumes
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: money-printer-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: moneyprinter
+      POSTGRES_PASSWORD: moneyprinter_dev
+      POSTGRES_DB: moneyprinter
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U moneyprinter -d moneyprinter']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: money-printer-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    # Enable append-only persistence so data survives container restarts
+    command: redis-server --appendonly yes --appendfsync everysec
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
