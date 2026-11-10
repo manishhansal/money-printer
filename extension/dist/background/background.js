@@ -37,7 +37,7 @@
   }
 
   // extension/src/background/background.ts
-  var DEFAULT_WSS_URL = "wss://localhost:3003";
+  var DEFAULT_WSS_URL = "ws://localhost:3003";
   var DEFAULT_HTTP_URL = "http://localhost:3002";
   var RECOVERY_TIMEOUT_MS = 5e3;
   var RECONNECT_DELAY_MS = 3e3;

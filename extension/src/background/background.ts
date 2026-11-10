@@ -17,7 +17,7 @@ import { saveState, loadState } from './state.manager';
 // ─── Configurable constants ────────────────────────────────────────────────────
 
 /** Default CloudEngine WebSocket endpoint (configurable for testing). */
-export const DEFAULT_WSS_URL = 'wss://localhost:3003';
+export const DEFAULT_WSS_URL = 'ws://localhost:3003';
 
 /** HTTP base URL for CloudEngine REST API calls. */
 export const DEFAULT_HTTP_URL = 'http://localhost:3002';
