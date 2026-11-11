@@ -9,6 +9,8 @@
 
 import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
 import { AppModule } from './app.module';
 
 /** Maximum milliseconds allowed for all infrastructure connections on startup. */
@@ -39,10 +41,17 @@ async function bootstrap(): Promise<void> {
   });
 
   try {
-    const app = await Promise.race([NestFactory.create(AppModule), connectionTimeoutGuard]);
+    const app = await Promise.race([
+      NestFactory.create<NestExpressApplication>(AppModule),
+      connectionTimeoutGuard,
+    ]);
 
     // Connections succeeded — cancel the deadline timer.
     clearTimeout(timeoutHandle);
+
+    // Serve the browser dashboard from the public/ directory.
+    // GET http://localhost:{PORT}/dashboard → public/index.html
+    app.useStaticAssets(join(__dirname, '..', 'public'));
 
     // CORS — allow Chrome extensions and localhost origins.
     // In production, restrict `chrome-extension://*` to known extension IDs.

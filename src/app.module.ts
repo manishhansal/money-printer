@@ -223,6 +223,8 @@ export class AppModule implements NestModule {
         { path: 'paper-trading/positions', method: RequestMethod.GET },
         { path: 'paper-trading/balance', method: RequestMethod.GET },
         { path: 'signals/ranked', method: RequestMethod.GET },
+        { path: 'debug/scan', method: RequestMethod.GET },
+        { path: 'debug/stats', method: RequestMethod.GET },
       )
       .forRoutes('*');
   }

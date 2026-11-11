@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MoneyPrinter — Trading Dashboard</title>
+  <style>
+    /* ── Reset & base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:        #0d0f14;
+      --surface:   #161b25;
+      --border:    #1e2a3a;
+      --accent:    #00d4aa;
+      --accent2:   #3b82f6;
+      --warn:      #f59e0b;
+      --danger:    #ef4444;
+      --success:   #22c55e;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --score-hi:  #22c55e;
+      --score-mid: #f59e0b;
+      --score-lo:  #ef4444;
+    }
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 13px;
+      overflow-x: hidden;
+    }
+
+    /* ── Layout ── */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 20px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 100;
+    }
+    .topbar-brand { font-size: 16px; font-weight: 700; color: var(--accent); letter-spacing: 1px; }
+    .topbar-status { display: flex; gap: 16px; align-items: center; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .dot-green { background: var(--success); box-shadow: 0 0 6px var(--success); }
+    .dot-red   { background: var(--danger);  box-shadow: 0 0 6px var(--danger); }
+    .dot-amber { background: var(--warn);    box-shadow: 0 0 6px var(--warn); }
+    .topbar-time { color: var(--muted); font-size: 11px; }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 320px 1fr 320px;
+      grid-template-rows: auto 1fr auto;
+      gap: 1px;
+      background: var(--border);
+      height: calc(100vh - 45px);
+      min-height: 600px;
+    }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--surface);
+      padding: 14px 16px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+    .card-title {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+    .card-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      background: var(--border);
+      color: var(--muted);
+    }
+    .card-body { flex: 1; overflow-y: auto; }
+    .card-body::-webkit-scrollbar { width: 4px; }
+    .card-body::-webkit-scrollbar-track { background: var(--bg); }
+    .card-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ── Grid layout areas ── */
+    .col-left   { grid-column: 1; display: flex; flex-direction: column; gap: 1px; }
+    .col-center { grid-column: 2; display: flex; flex-direction: column; gap: 1px; }
+    .col-right  { grid-column: 3; display: flex; flex-direction: column; gap: 1px; }
+
+    /* ── P&L hero card ── */
+    .pnl-card {
+      background: var(--surface);
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .pnl-row { display: flex; gap: 24px; align-items: flex-end; }
+    .pnl-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+    .pnl-value { font-size: 28px; font-weight: 700; line-height: 1; }
+    .pnl-positive { color: var(--success); }
+    .pnl-negative { color: var(--danger); }
+    .pnl-neutral  { color: var(--text); }
+    .pnl-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    /* ── Regime badge ── */
+    .regime-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+    .regime-bull   { background: rgba(34,197,94,.15);  color: var(--success); border: 1px solid rgba(34,197,94,.3); }
+    .regime-bear   { background: rgba(239,68,68,.15);  color: var(--danger);  border: 1px solid rgba(239,68,68,.3); }
+    .regime-side   { background: rgba(100,116,139,.15);color: var(--muted);   border: 1px solid rgba(100,116,139,.3); }
+    .regime-vol    { background: rgba(245,158,11,.15); color: var(--warn);    border: 1px solid rgba(245,158,11,.3); }
+
+    /* ── Arm button ── */
+    .arm-section {
+      padding: 12px 16px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .btn {
+      padding: 8px 16px;
+      border-radius: 5px;
+      border: none;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: all .15s;
+      width: 100%;
+    }
+    .btn-arm    { background: rgba(34,197,94,.2);  color: var(--success); border: 1px solid rgba(34,197,94,.4); }
+    .btn-arm:hover { background: rgba(34,197,94,.35); }
+    .btn-disarm { background: rgba(239,68,68,.2);  color: var(--danger);  border: 1px solid rgba(239,68,68,.4); }
+    .btn-disarm:hover { background: rgba(239,68,68,.35); }
+    .btn-kill   { background: rgba(239,68,68,.5);  color: #fff; }
+    .btn-kill:hover { background: rgba(239,68,68,.8); }
+    .btn-scan   { background: rgba(59,130,246,.2); color: var(--accent2); border: 1px solid rgba(59,130,246,.4); }
+    .btn-scan:hover { background: rgba(59,130,246,.35); }
+    .armed-state {
+      text-align: center;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      padding: 4px 8px;
+      border-radius: 3px;
+    }
+    .state-disarmed  { color: var(--muted);   background: rgba(100,116,139,.1); }
+    .state-pending   { color: var(--warn);    background: rgba(245,158,11,.1); }
+    .state-armed     { color: var(--success); background: rgba(34,197,94,.1); }
+
+    /* ── Signal feed ── */
+    .signal-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .signal-item:last-child { border-bottom: none; }
+    .signal-left  { flex: 1; }
+    .signal-strat { font-size: 11px; color: var(--accent2); font-weight: 700; }
+    .signal-dir   { font-size: 10px; color: var(--muted); }
+    .signal-ts    { font-size: 10px; color: var(--muted); }
+    .signal-score {
+      font-size: 15px;
+      font-weight: 700;
+      min-width: 36px;
+      text-align: right;
+    }
+    .score-hi  { color: var(--score-hi); }
+    .score-mid { color: var(--score-mid); }
+    .score-lo  { color: var(--score-lo); }
+    .signal-status {
+      font-size: 9px;
+      padding: 1px 5px;
+      border-radius: 2px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      margin-left: 6px;
+    }
+    .status-active   { background: rgba(34,197,94,.15);  color: var(--success); }
+    .status-accepted { background: rgba(59,130,246,.15); color: var(--accent2); }
+    .status-rejected { background: rgba(100,116,139,.1); color: var(--muted); }
+    .status-expired  { background: rgba(100,116,139,.1); color: var(--muted); }
+
+    /* ── Positions table ── */
+    .positions-table { width: 100%; border-collapse: collapse; }
+    .positions-table th {
+      font-size: 9px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      padding: 0 0 6px 0;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    .positions-table td {
+      padding: 6px 0;
+      font-size: 12px;
+      border-bottom: 1px solid rgba(30,42,58,.5);
+      vertical-align: middle;
+    }
+    .dir-long  { color: var(--success); font-weight: 700; }
+    .dir-short { color: var(--danger);  font-weight: 700; }
+    .pnl-pos { color: var(--success); }
+    .pnl-neg { color: var(--danger); }
+
+    /* ── Chart area ── */
+    #pnl-canvas-wrap { width: 100%; flex: 1; min-height: 120px; position: relative; }
+    #pnl-canvas { width: 100% !important; }
+
+    /* ── Alerts ── */
+    .alert-item {
+      padding: 8px 10px;
+      border-radius: 4px;
+      margin-bottom: 6px;
+      font-size: 11px;
+      line-height: 1.4;
+      border-left: 3px solid;
+    }
+    .alert-MAX      { border-color: var(--danger);  background: rgba(239,68,68,.08); }
+    .alert-CRITICAL { border-color: var(--danger);  background: rgba(239,68,68,.06); }
+    .alert-WARNING  { border-color: var(--warn);    background: rgba(245,158,11,.06); }
+    .alert-INFO     { border-color: var(--accent2); background: rgba(59,130,246,.06); }
+    .alert-title  { font-weight: 700; margin-bottom: 2px; }
+    .alert-msg    { color: var(--muted); font-size: 10px; }
+    .alert-ts     { color: var(--muted); font-size: 9px; float: right; }
+
+    /* ── Health row ── */
+    .health-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 5px 0;
+      border-bottom: 1px solid rgba(30,42,58,.4);
+    }
+    .health-row:last-child { border-bottom: none; }
+    .health-name { font-size: 11px; color: var(--muted); }
+    .health-val  { font-size: 11px; font-weight: 700; }
+    .health-ok   { color: var(--success); }
+    .health-err  { color: var(--danger); }
+
+    /* ── Stats row ── */
+    .stats-row { display: flex; gap: 1px; border-top: 1px solid var(--border); }
+    .stat-cell {
+      flex: 1;
+      background: var(--surface);
+      padding: 10px 14px;
+      text-align: center;
+    }
+    .stat-val   { font-size: 20px; font-weight: 700; color: var(--text); }
+    .stat-label { font-size: 9px;  color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
+
+    /* ── Empty state ── */
+    .empty { color: var(--muted); font-size: 11px; text-align: center; padding: 24px 0; }
+
+    /* ── Spinner ── */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      display: inline-block;
+      width: 12px; height: 12px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+      vertical-align: middle;
+      margin-right: 4px;
+    }
+
+    /* ── Scroll ── */
+    .scroll { overflow-y: auto; flex: 1; }
+    .scroll::-webkit-scrollbar { width: 3px; }
+    .scroll::-webkit-scrollbar-thumb { background: var(--border); }
+  </style>
+</head>
+<body>
+
+<!-- ── Top bar ── -->
+<div class="topbar">
+  <div class="topbar-brand">⚡ MONEYPRINTER</div>
+  <div class="topbar-status">
+    <span id="ws-indicator"><span class="dot dot-red"></span> WS Disconnected</span>
+    <span id="regime-display" class="regime-badge regime-side">—</span>
+    <span id="session-phase" style="font-size:11px;color:var(--muted)">—</span>
+  </div>
+  <div class="topbar-time" id="clock">—</div>
+</div>
+
+<!-- ── P&L hero ── -->
+<div class="pnl-card">
+  <div class="pnl-row">
+    <div>
+      <div class="pnl-label">Paper P&L</div>
+      <div class="pnl-value pnl-neutral" id="paper-pnl">₹0.00</div>
+      <div class="pnl-sub">Balance: <span id="paper-balance">₹50,000</span></div>
+    </div>
+    <div>
+      <div class="pnl-label">Open Positions</div>
+      <div class="pnl-value" style="font-size:22px" id="pos-count">0</div>
+    </div>
+    <div>
+      <div class="pnl-label">Active Signals</div>
+      <div class="pnl-value" style="font-size:22px;color:var(--accent2)" id="sig-count">0</div>
+    </div>
+    <div>
+      <div class="pnl-label">Trades Today</div>
+      <div class="pnl-value" style="font-size:22px;color:var(--muted)" id="trade-count">0</div>
+    </div>
+    <div style="margin-left:auto">
+      <button class="btn btn-scan" onclick="triggerScan()" style="width:auto;padding:6px 14px">
+        🔄 Trigger Scan
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Main grid ── -->
+<div class="main-grid">
+
+  <!-- ── Left column ── -->
+  <div class="col-left">
+
+    <!-- Signals -->
+    <div class="card" style="flex:1">
+      <div class="card-header">
+        <span class="card-title">Recent Signals</span>
+        <span class="card-badge" id="sig-badge">0</span>
+      </div>
+      <div class="card-body scroll" id="signal-list">
+        <div class="empty">No signals yet</div>
+      </div>
+    </div>
+
+    <!-- Alerts -->
+    <div class="card" style="max-height:220px">
+      <div class="card-header">
+        <span class="card-title">Alerts</span>
+        <span class="card-badge" id="alert-badge">0</span>
+      </div>
+      <div class="card-body scroll" id="alert-list">
+        <div class="empty">No alerts</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Center column ── -->
+  <div class="col-center">
+
+    <!-- Positions table -->
+    <div class="card" style="flex:1">
+      <div class="card-header">
+        <span class="card-title">Open Paper Positions</span>
+        <span class="card-badge" id="pos-badge">0</span>
+      </div>
+      <div class="card-body scroll">
+        <table class="positions-table" id="pos-table">
+          <thead>
+            <tr>
+              <th>Instrument</th>
+              <th>Dir</th>
+              <th>Qty</th>
+              <th>Avg Entry</th>
+              <th>Unrealised P&L</th>
+              <th>Opened</th>
+            </tr>
+          </thead>
+          <tbody id="pos-tbody">
+            <tr><td colspan="6" class="empty">No open positions</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- P&L mini chart -->
+    <div class="card" style="height:160px">
+      <div class="card-header">
+        <span class="card-title">Portfolio P&L Curve</span>
+      </div>
+      <div id="pnl-canvas-wrap">
+        <canvas id="pnl-canvas"></canvas>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Right column ── -->
+  <div class="col-right">
+
+    <!-- Arm controls -->
+    <div class="card" style="max-height:210px">
+      <div class="card-header">
+        <span class="card-title">Engine Control</span>
+      </div>
+      <div class="armed-state state-disarmed" id="arm-state">DISARMED</div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px">
+        <button class="btn btn-arm"    id="btn-arm"     onclick="requestArm()">① Activate Live Mode</button>
+        <button class="btn btn-arm"    id="btn-confirm" onclick="confirmArm()" style="display:none">② Confirm Arm</button>
+        <button class="btn btn-disarm" id="btn-disarm"  onclick="disarm()">Disarm Engine</button>
+        <button class="btn btn-kill"   onclick="killSwitch()">⚠ Kill Switch</button>
+      </div>
+    </div>
+
+    <!-- Health -->
+    <div class="card" style="flex:1">
+      <div class="card-header">
+        <span class="card-title">System Health</span>
+      </div>
+      <div class="card-body" id="health-list">
+        <div class="health-row"><span class="health-name">CloudEngine</span><span class="health-val health-ok">—</span></div>
+        <div class="health-row"><span class="health-name">WebSocket Feed</span><span class="health-val health-ok" id="h-ws">—</span></div>
+        <div class="health-row"><span class="health-name">Dhan API</span><span class="health-val" id="h-dhan">—</span></div>
+        <div class="health-row"><span class="health-name">PostgreSQL</span><span class="health-val" id="h-pg">—</span></div>
+        <div class="health-row"><span class="health-name">Redis</span><span class="health-val" id="h-redis">—</span></div>
+        <div class="health-row"><span class="health-name">Session Phase</span><span class="health-val" id="h-phase">—</span></div>
+        <div class="health-row"><span class="health-name">Market Data</span><span class="health-val" id="h-mkt">—</span></div>
+      </div>
+    </div>
+
+    <!-- Options flow summary -->
+    <div class="card" style="max-height:150px">
+      <div class="card-header">
+        <span class="card-title">Options Flow</span>
+      </div>
+      <div class="card-body" id="options-flow-info">
+        <div class="empty">Loading...</div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- ── Stats footer ── -->
+<div class="stats-row">
+  <div class="stat-cell">
+    <div class="stat-val" id="stat-evals">—</div>
+    <div class="stat-label">Evals Today</div>
+  </div>
+  <div class="stat-cell">
+    <div class="stat-val" id="stat-orders">—</div>
+    <div class="stat-label">Paper Orders</div>
+  </div>
+  <div class="stat-cell">
+    <div class="stat-val" id="stat-fills">—</div>
+    <div class="stat-label">Filled</div>
+  </div>
+  <div class="stat-cell">
+    <div class="stat-val" id="stat-instruments">—</div>
+    <div class="stat-label">Instruments</div>
+  </div>
+  <div class="stat-cell">
+    <div class="stat-val" id="stat-last-scan">—</div>
+    <div class="stat-label">Last Scan</div>
+  </div>
+</div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+const API  = 'http://localhost:3002';
+const WS   = 'ws://localhost:3003';
+const POLL_INTERVAL_MS = 10_000;
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let ws = null;
+let signals = [];
+let positions = [];
+let alerts = [];
+let pnlHistory = [];
+let armedState = 'DISARMED';
+let lastScanTime = null;
+let statsCache = { evals: 0, orders: 0, fills: 0, instruments: 0 };
+
+// ── Clock ─────────────────────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false }) + ' IST';
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── WebSocket ─────────────────────────────────────────────────────────────────
+function connectWS() {
+  ws = new WebSocket(WS);
+  ws.onopen = () => {
+    document.getElementById('ws-indicator').innerHTML =
+      '<span class="dot dot-green"></span> WS Connected';
+  };
+  ws.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.event === 'notification' && msg.data) {
+        pushAlert(msg.data);
+      }
+    } catch {}
+  };
+  ws.onclose = () => {
+    document.getElementById('ws-indicator').innerHTML =
+      '<span class="dot dot-red"></span> WS Disconnected';
+    setTimeout(connectWS, 3000);
+  };
+  ws.onerror = () => {};
+}
+connectWS();
+
+// ── Fetchers ──────────────────────────────────────────────────────────────────
+async function fetchSignals() {
+  try {
+    const r = await fetch(`${API}/signals/ranked`);
+    if (!r.ok) return;
+    signals = await r.json();
+    renderSignals();
+    document.getElementById('sig-count').textContent = signals.length;
+    document.getElementById('sig-badge').textContent = signals.length;
+  } catch {}
+}
+
+async function fetchPositions() {
+  try {
+    const r = await fetch(`${API}/paper-trading/positions`);
+    if (!r.ok) return;
+    positions = await r.json();
+    renderPositions();
+    document.getElementById('pos-count').textContent = positions.length;
+    document.getElementById('pos-badge').textContent = positions.length;
+  } catch {}
+}
+
+async function fetchBalance() {
+  try {
+    const r = await fetch(`${API}/paper-trading/balance`);
+    if (!r.ok) return;
+    const { balance } = await r.json();
+    const val = parseFloat(balance);
+    document.getElementById('paper-balance').textContent = '₹' + val.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+  } catch {}
+}
+
+async function fetchPortfolio() {
+  try {
+    const r = await fetch(`${API}/portfolio/summary`);
+    if (!r.ok) return;
+    const data = await r.json();
+    const pnl = data.paper?.netPnl ?? 0;
+    const el = document.getElementById('paper-pnl');
+    el.textContent = (pnl >= 0 ? '+' : '') + '₹' + Math.abs(pnl).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+    el.className = 'pnl-value ' + (pnl > 0 ? 'pnl-positive' : pnl < 0 ? 'pnl-negative' : 'pnl-neutral');
+    document.getElementById('trade-count').textContent = data.paper?.tradeCount ?? 0;
+    pnlHistory.push({ t: Date.now(), v: pnl });
+    if (pnlHistory.length > 50) pnlHistory.shift();
+    renderChart();
+  } catch {}
+}
+
+async function fetchOptionsFlow() {
+  try {
+    const r = await fetch(`${API}/options-flow/dashboard`);
+    if (!r.ok) return;
+    const data = await r.json();
+    const snap = data.snapshots?.[0];
+    if (!snap) return;
+    document.getElementById('options-flow-info').innerHTML = `
+      <div class="health-row"><span class="health-name">PCR</span><span class="health-val">${snap.putCallRatio?.toFixed(2) ?? '—'}</span></div>
+      <div class="health-row"><span class="health-name">IV Skew</span><span class="health-val">${snap.ivSkew?.toFixed(2) ?? '—'}</span></div>
+      <div class="health-row"><span class="health-name">Net OI Δ</span><span class="health-val">${snap.netOiChange?.toLocaleString('en-IN') ?? '—'}</span></div>
+    `;
+  } catch {}
+}
+
+async function fetchRegime() {
+  try {
+    const r = await fetch(`${API}/signals/ranked`);
+    if (!r.ok || !signals.length) return;
+    const regime = signals[0]?.signal?.regime ?? null;
+    if (!regime) return;
+    const el = document.getElementById('regime-display');
+    el.textContent = regime;
+    el.className = 'regime-badge ' + regimeClass(regime);
+  } catch {}
+}
+
+async function fetchStats() {
+  try {
+    // Phase from session phase
+    const redisReady = document.getElementById('h-redis').textContent;
+  } catch {}
+}
+
+// ── Render functions ──────────────────────────────────────────────────────────
+function renderSignals() {
+  const el = document.getElementById('signal-list');
+  if (!signals.length) { el.innerHTML = '<div class="empty">No active signals</div>'; return; }
+  el.innerHTML = signals.slice(0, 20).map(item => {
+    const s = item.signal;
+    const score = parseFloat(s.compositeScore);
+    const scoreClass = score >= 85 ? 'score-hi' : score >= 80 ? 'score-mid' : 'score-lo';
+    const ts = new Date(s.signalTimestamp).toLocaleTimeString('en-IN', { hour12: false, hour: '2-digit', minute: '2-digit' });
+    const strategy = s.strategy?.code ?? '?';
+    const statusBadge = `<span class="signal-status status-${s.status}">${s.status}</span>`;
+    return `
+      <div class="signal-item">
+        <div class="signal-left">
+          <div><span class="signal-strat">${strategy}</span>${statusBadge}</div>
+          <div class="signal-dir">${s.direction} · rank #${item.rank} · EV ${item.expectedValue?.toFixed(1) ?? '—'}</div>
+          <div class="signal-ts">${ts} · ₹${parseFloat(s.entryPrice).toFixed(1)} · ${s.regime ?? '—'}</div>
+        </div>
+        <div class="signal-score ${scoreClass}">${score.toFixed(0)}</div>
+      </div>`;
+  }).join('');
+}
+
+function renderPositions() {
+  const tbody = document.getElementById('pos-tbody');
+  if (!positions.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">No open positions</td></tr>';
+    return;
+  }
+  tbody.innerHTML = positions.map(p => {
+    const pnl = parseFloat(p.unrealized_pnl || '0');
+    const pnlClass = pnl > 0 ? 'pnl-pos' : pnl < 0 ? 'pnl-neg' : '';
+    const pnlStr = (pnl >= 0 ? '+' : '') + '₹' + Math.abs(pnl).toFixed(2);
+    const entry = parseFloat(p.average_entry_price);
+    const shortId = p.instrument_id.slice(0, 8);
+    const opened = new Date(p.opened_at).toLocaleTimeString('en-IN', { hour12: false, hour: '2-digit', minute: '2-digit' });
+    return `<tr>
+      <td style="font-family:monospace;font-size:11px">${shortId}…</td>
+      <td class="${p.direction === 'LONG' ? 'dir-long' : 'dir-short'}">${p.direction === 'LONG' ? '▲ L' : '▼ S'}</td>
+      <td>${p.quantity}</td>
+      <td>₹${entry.toFixed(2)}</td>
+      <td class="${pnlClass}">${pnlStr}</td>
+      <td style="color:var(--muted)">${opened}</td>
+    </tr>`;
+  }).join('');
+}
+
+function pushAlert(alert) {
+  alerts.unshift(alert);
+  if (alerts.length > 30) alerts.pop();
+  renderAlerts();
+  document.getElementById('alert-badge').textContent = alerts.length;
+}
+
+function renderAlerts() {
+  const el = document.getElementById('alert-list');
+  if (!alerts.length) { el.innerHTML = '<div class="empty">No alerts</div>'; return; }
+  el.innerHTML = alerts.slice(0, 15).map(a => {
+    const ts = new Date(a.createdAt || Date.now()).toLocaleTimeString('en-IN', { hour12: false });
+    return `
+      <div class="alert-item alert-${a.priority}">
+        <span class="alert-ts">${ts}</span>
+        <div class="alert-title">${escHtml(a.title ?? '')}</div>
+        <div class="alert-msg">${escHtml((a.message ?? '').slice(0, 120))}</div>
+      </div>`;
+  }).join('');
+}
+
+// ── P&L mini chart (vanilla canvas) ──────────────────────────────────────────
+function renderChart() {
+  const wrap = document.getElementById('pnl-canvas-wrap');
+  const canvas = document.getElementById('pnl-canvas');
+  const W = wrap.clientWidth;
+  const H = wrap.clientHeight || 100;
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  if (pnlHistory.length < 2) {
+    ctx.fillStyle = '#3b4a5a';
+    ctx.font = '11px monospace';
+    ctx.fillText('Collecting P&L data…', 20, H / 2);
+    return;
+  }
+
+  const vals = pnlHistory.map(p => p.v);
+  const mn = Math.min(...vals, 0);
+  const mx = Math.max(...vals, 0);
+  const range = mx - mn || 1;
+  const pad = 10;
+  const toY = v => H - pad - ((v - mn) / range) * (H - 2 * pad);
+  const toX = i => (i / (pnlHistory.length - 1)) * W;
+
+  // Zero line
+  ctx.strokeStyle = 'rgba(100,116,139,0.3)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  const y0 = toY(0);
+  ctx.moveTo(0, y0); ctx.lineTo(W, y0);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Fill gradient
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  const lastVal = vals[vals.length - 1];
+  const color = lastVal >= 0 ? '34,197,94' : '239,68,68';
+  grad.addColorStop(0, `rgba(${color},0.3)`);
+  grad.addColorStop(1, `rgba(${color},0)`);
+  ctx.beginPath();
+  ctx.moveTo(toX(0), toY(vals[0]));
+  vals.forEach((v, i) => ctx.lineTo(toX(i), toY(v)));
+  ctx.lineTo(toX(vals.length - 1), H);
+  ctx.lineTo(0, H);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  ctx.strokeStyle = lastVal >= 0 ? '#22c55e' : '#ef4444';
+  ctx.lineWidth = 2;
+  ctx.moveTo(toX(0), toY(vals[0]));
+  vals.forEach((v, i) => ctx.lineTo(toX(i), toY(v)));
+  ctx.stroke();
+}
+
+// ── Arm/Disarm controls ───────────────────────────────────────────────────────
+async function requestArm() {
+  try {
+    await fetch(`${API}/live-trading/arm/request`, { method: 'POST', headers: { 'X-CSRF-Token': await getCsrf() } });
+    updateArmState('ARMED_PENDING');
+  } catch (e) { showToast('Arm request failed: ' + e.message, 'error'); }
+}
+async function confirmArm() {
+  try {
+    await fetch(`${API}/live-trading/arm/confirm`, { method: 'POST', headers: { 'X-CSRF-Token': await getCsrf() } });
+    updateArmState('ARMED');
+  } catch (e) { showToast('Confirm arm failed: ' + e.message, 'error'); }
+}
+async function disarm() {
+  try {
+    await fetch(`${API}/live-trading/arm/disarm`, { method: 'POST', headers: { 'X-CSRF-Token': await getCsrf() } });
+    updateArmState('DISARMED');
+  } catch (e) { showToast('Disarm failed: ' + e.message, 'error'); }
+}
+async function killSwitch() {
+  if (!confirm('⚠ Activate KILL SWITCH? This will cancel all orders and close all positions.')) return;
+  try {
+    await fetch(`${API}/live-trading/kill-switch`, { method: 'POST', headers: { 'X-CSRF-Token': await getCsrf() } });
+    showToast('Kill switch activated', 'warn');
+  } catch (e) { showToast('Kill switch failed: ' + e.message, 'error'); }
+}
+
+function updateArmState(state) {
+  armedState = state;
+  const el = document.getElementById('arm-state');
+  const btnConfirm = document.getElementById('btn-confirm');
+  if (state === 'DISARMED') {
+    el.className = 'armed-state state-disarmed'; el.textContent = 'DISARMED';
+    btnConfirm.style.display = 'none';
+  } else if (state === 'ARMED_PENDING') {
+    el.className = 'armed-state state-pending'; el.textContent = '⏳ PENDING CONFIRMATION';
+    btnConfirm.style.display = 'block';
+  } else {
+    el.className = 'armed-state state-armed'; el.textContent = '✓ ARMED — LIVE TRADING ACTIVE';
+    btnConfirm.style.display = 'none';
+  }
+}
+
+// ── Trigger scan ──────────────────────────────────────────────────────────────
+async function triggerScan() {
+  try {
+    const r = await fetch(`${API}/debug/scan`);
+    const data = await r.json();
+    lastScanTime = new Date(data.triggeredAt);
+    document.getElementById('stat-last-scan').textContent =
+      lastScanTime.toLocaleTimeString('en-IN', { hour12: false, hour: '2-digit', minute: '2-digit' });
+    showToast('Scan triggered at ' + lastScanTime.toLocaleTimeString('en-IN'), 'info');
+    setTimeout(fetchAll, 3000); // refresh after scan completes
+  } catch (e) { showToast('Scan failed: ' + e.message, 'error'); }
+}
+
+// ── CSRF helper ───────────────────────────────────────────────────────────────
+let _csrf = null;
+async function getCsrf() {
+  if (_csrf) return _csrf;
+  await fetch(`${API}/`); // GET sets the cookie
+  const cookies = document.cookie.split(';').map(c => c.trim());
+  const c = cookies.find(c => c.startsWith('csrf-token='));
+  _csrf = c ? c.split('=')[1] : '';
+  return _csrf;
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function showToast(msg, type = 'info') {
+  const el = document.createElement('div');
+  el.style.cssText = `position:fixed;bottom:20px;right:20px;padding:10px 16px;border-radius:5px;
+    font-size:12px;z-index:9999;animation:fadeIn .2s;
+    background:${type==='error'?'#ef4444':type==='warn'?'#f59e0b':'#3b82f6'};color:#fff;
+    box-shadow:0 4px 12px rgba(0,0,0,.4);max-width:300px;`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function regimeClass(r) {
+  if (!r) return 'regime-side';
+  const u = r.toUpperCase();
+  if (u.includes('BULL')) return 'regime-bull';
+  if (u.includes('BEAR')) return 'regime-bear';
+  if (u.includes('VOL') || u.includes('HIGH')) return 'regime-vol';
+  return 'regime-side';
+}
+
+// ── DB stats via NodeJS (fetch from debug endpoint) ───────────────────────────
+async function fetchDbStats() {
+  try {
+    const r = await fetch(`${API}/debug/stats`);
+    if (!r.ok) return;
+    const d = await r.json();
+    document.getElementById('stat-evals').textContent   = (d.signalEvals   ?? '—').toLocaleString();
+    document.getElementById('stat-orders').textContent  = (d.paperOrders   ?? '—').toLocaleString();
+    document.getElementById('stat-fills').textContent   = (d.paperFills    ?? '—').toLocaleString();
+    document.getElementById('stat-instruments').textContent = (d.instruments ?? '—').toLocaleString();
+  } catch {}
+}
+
+// ── Main polling loop ─────────────────────────────────────────────────────────
+async function fetchAll() {
+  await Promise.allSettled([
+    fetchSignals(),
+    fetchPositions(),
+    fetchBalance(),
+    fetchPortfolio(),
+    fetchDbStats(),
+  ]);
+}
+
+fetchAll();
+setInterval(fetchAll, POLL_INTERVAL_MS);
+setInterval(fetchOptions, 30_000);
+function fetchOptions() { fetchOptionsFlow(); }
+fetchOptionsFlow();
+
+window.addEventListener('resize', renderChart);
+</script>
+</body>
+</html>
