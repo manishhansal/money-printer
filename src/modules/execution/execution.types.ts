@@ -18,6 +18,8 @@ import { DhanExchangeSegment, DhanProductType } from '../dhan/dhan-api.types';
  */
 export type PreTradeCheck =
   | 'duplicate-order-rejected' // Check 0: Redis idempotency key already exists (Req 16.6, 16.7)
+  | 'engine-not-armed' //        Check 0a: LIVE engine is not in ARMED state (Req 11.1, 11.3)
+  | 'entry-blocked' //           Check 0b: isNewEntryBlocked() — CLOSING/LOCKOUT/HALT (Req 17.3, 11.3)
   | 'score-below-threshold' // Check 1: compositeScore < 80
   | 'risk-engine-rejected' // Check 2: RiskManagementService.evaluatePreEntryGates rejected
   | 'insufficient-margin' // Check 3: available margin < required margin

@@ -107,11 +107,12 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
    * Publish a message to a Redis channel. Returns the number of subscribers
    * that received the message.
    *
-   * Uses the dedicated pub/sub client so the command client remains free for
-   * regular operations.
+   * Uses the command client (not pubSubClient) because a client in subscriber
+   * mode cannot publish — only the command client can do both pub/sub sends
+   * and regular commands.
    */
   async publish(channel: string, message: string): Promise<number> {
-    return this.pubSubClient.publish(channel, message);
+    return this.client.publish(channel, message);
   }
 
   /**
@@ -158,5 +159,14 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   /** Returns the raw pub/sub client — use sparingly. */
   getPubSubClient(): Redis {
     return this.pubSubClient;
+  }
+
+  /**
+   * Returns all keys matching the given glob pattern.
+   * Use carefully in production — KEYS is O(N) and blocks Redis.
+   * Only call with specific prefixes (e.g. 'mkt:snapshot:*') to bound N.
+   */
+  async keys(pattern: string): Promise<string[]> {
+    return this.client.keys(pattern);
   }
 }

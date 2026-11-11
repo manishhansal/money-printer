@@ -55,9 +55,11 @@ export class OpportunityRankingService {
    * @returns Array of `RankedSignal` objects, ordered by rank ascending.
    */
   async rankActiveSignals(currentRegime?: string): Promise<RankedSignal[]> {
-    // 1. Fetch all active signals with the strategy relation populated.
+    // 1. Fetch all active/accepted signals with the strategy relation populated.
+    // Include 'accepted' so signals that passed scoring but haven't executed yet
+    // are still visible in the Chrome Extension dashboard.
     const activeSignals = await this.signalsRepo.find({
-      where: { status: 'active' },
+      where: [{ status: 'active' }, { status: 'accepted' }],
       relations: ['strategy'],
     });
 

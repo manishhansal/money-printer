@@ -57,7 +57,6 @@ import {
   PaperOrderResult,
   PaperSlippageConfig,
   PaperLatencyConfig,
-  PaperTradingCosts,
   PaperFillEventPayload,
   PaperOrderEventPayload,
   PaperTradeEventPayload,
@@ -241,7 +240,10 @@ export class PaperTradingService {
     });
 
     // ── Step 4: Fetch market snapshot from Redis ─────────────────────────────
-    const snapshot = await this.fetchMarketSnapshot(instrumentId);
+    // Use marketDataKey (Dhan securityId) if supplied, otherwise fall back to
+    // instrumentId (DB UUID). Redis snapshots are keyed by securityId.
+    const snapshotKey = request.marketDataKey ?? instrumentId;
+    const snapshot = await this.fetchMarketSnapshot(snapshotKey);
 
     if (!snapshot) {
       // Requirement 10.4: reject with "market data unavailable"

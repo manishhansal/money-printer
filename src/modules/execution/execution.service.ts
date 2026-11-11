@@ -9,6 +9,11 @@
  *      Returns the existing orderId so callers can safely retry.
  *      After successful placement the key is written with TTL = 300 s.
  *
+ * Armed-state gates (Requirements 11.1, 11.3) — LIVE engine only:
+ *   0a. LiveTradingService.isArmed() === false  → reject "engine-not-armed"
+ *   0b. LiveTradingService.isNewEntryBlocked()  → reject "entry-blocked"
+ *       (covers CLOSING phase, TWO_LOSS_LOCKOUT, EMERGENCY_HALT, kill switch)
+ *
  * Pre-trade validation chain (Requirements 11.3, 11.4):
  *   1. compositeScore ≥ 80           → reject "score-below-threshold"
  *   2. RiskManagementService approval → reject "risk-engine-rejected"
@@ -36,6 +41,7 @@ import { DhanOrderType } from '../dhan/dhan-api.types';
 import { RiskManagementService } from '../risk-management/risk-management.service';
 import { SessionManagerService } from '../session-manager/session-manager.service';
 import { SessionPhase } from '../session-manager/session-manager.types';
+import { LiveTradingService } from '../live-trading/live-trading.service';
 import { SecretsService } from '../secrets/secrets.service';
 import { RedisService } from '../redis/redis.service';
 
@@ -101,6 +107,7 @@ export class ExecutionService {
     private readonly dhanApiClient: DhanApiClient,
     private readonly riskManagementService: RiskManagementService,
     private readonly sessionManagerService: SessionManagerService,
+    private readonly liveTradingService: LiveTradingService,
     private readonly secretsService: SecretsService,
     private readonly redisService: RedisService,
   ) {}
@@ -118,6 +125,47 @@ export class ExecutionService {
    * Requirements: 11.3, 11.4
    */
   async placeOrder(orderRequest: OrderRequest): Promise<OrderResponse> {
+    // ── Check 0a/0b: Armed-state guards — LIVE engine only ───────────────────
+    // PAPER orders bypass the armed-state machine entirely; they run in a fully
+    // isolated simulation and must never be blocked by the live safety switch.
+    //
+    // For LIVE orders:
+    //   0a. Engine must be in the ARMED state (Req 11.1, 11.3).
+    //       DISARMED or ARMED_PENDING → reject immediately.
+    //   0b. New entries must not be blocked (Req 17.3, 11.3).
+    //       Covers: CLOSING phase, TWO_LOSS_LOCKOUT, EMERGENCY_HALT, kill switch.
+    if (orderRequest.engine === 'LIVE') {
+      if (!this.liveTradingService.isArmed()) {
+        this.logger.warn(
+          `[PreTrade] LIVE order rejected — engine is not ARMED ` +
+            `(state=${this.liveTradingService.getArmedState()})`,
+        );
+        return {
+          orderId: null,
+          dhanOrderId: null,
+          status: 'rejected',
+          rejectedBy: 'engine-not-armed',
+          rejectionReason:
+            'Live trading engine is not armed — arm the engine before placing orders',
+        };
+      }
+
+      if (this.liveTradingService.isNewEntryBlocked()) {
+        this.logger.warn(
+          `[PreTrade] LIVE order rejected — new entries are blocked ` +
+            `(session phase or risk state prevents new entries)`,
+        );
+        return {
+          orderId: null,
+          dhanOrderId: null,
+          status: 'rejected',
+          rejectedBy: 'entry-blocked',
+          rejectionReason:
+            'New entries blocked: session is in CLOSING/EOD phase, or TWO_LOSS_LOCKOUT/EMERGENCY_HALT is active',
+        };
+      }
+    }
+
     // ── Check 0: Idempotency (Redis) ─────────────────────────────────────────
     const idempotencyCheck = await this.checkIdempotency(orderRequest.idempotencyKey);
     if (!idempotencyCheck.passed) {

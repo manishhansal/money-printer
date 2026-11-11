@@ -145,12 +145,12 @@ describe('RedisService', () => {
   // ---------------------------------------------------------------------------
 
   describe('publish()', () => {
-    it('delegates to the pub/sub client (NOT the command client)', async () => {
-      pubSubClient.publish.mockResolvedValue(3);
+    it('delegates to the command client (NOT the pub/sub client, which is in subscriber mode)', async () => {
+      commandClient.publish.mockResolvedValue(3);
       const result = await service.publish('events:tick:NIFTY', '{"ltp":22500}');
       expect(result).toBe(3);
-      expect(pubSubClient.publish).toHaveBeenCalledWith('events:tick:NIFTY', '{"ltp":22500}');
-      expect(commandClient.publish).not.toHaveBeenCalled();
+      expect(commandClient.publish).toHaveBeenCalledWith('events:tick:NIFTY', '{"ltp":22500}');
+      expect(pubSubClient.publish).not.toHaveBeenCalled();
     });
   });
 
@@ -203,16 +203,19 @@ describe('RedisService', () => {
   // ---------------------------------------------------------------------------
 
   describe('client isolation', () => {
-    it('pub/sub operations never touch the command client', async () => {
-      pubSubClient.publish.mockResolvedValue(0);
+    it('pub/sub subscribe/unsubscribe operations never touch the command client', async () => {
+      commandClient.publish.mockResolvedValue(0);
       pubSubClient.subscribe.mockResolvedValue(1);
       pubSubClient.unsubscribe.mockResolvedValue(0);
 
-      await service.publish('ch', 'msg');
+      await service.publish('ch', 'msg'); // uses commandClient
       await service.subscribe('ch', jest.fn());
       await service.unsubscribe('ch');
 
-      expect(commandClient.publish).not.toHaveBeenCalled();
+      // publish uses commandClient — that is intentional (pubSubClient is in sub mode)
+      expect(commandClient.publish).toHaveBeenCalled();
+      expect(pubSubClient.publish).not.toHaveBeenCalled();
+      // subscribe/unsubscribe still use pubSubClient
       expect(commandClient.subscribe).not.toHaveBeenCalled();
       expect(commandClient.unsubscribe).not.toHaveBeenCalled();
     });

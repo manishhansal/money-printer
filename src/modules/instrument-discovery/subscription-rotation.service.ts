@@ -29,6 +29,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { OnEvent } from '@nestjs/event-emitter';
 import { Instruments } from '../../database/entities/instruments.entity';
 import { DhanWebSocketClient } from '../dhan/dhan-websocket.client';
 import { InstrumentDiscoveryService } from './instrument-discovery.service';
@@ -111,6 +112,42 @@ export class SubscriptionRotationService implements OnModuleInit {
         `lower=${this.lowerThresholdPct}%, ` +
         `minScore=${this.minLiquidityScore}`,
     );
+
+    // Establish the Dhan WebSocket connection for the live market feed.
+    // The client uses exponential backoff reconnection automatically.
+    void this.dhanWebSocketClient.connect().catch((err) => {
+      this.logger.error(
+        `SubscriptionRotation: failed to initiate WebSocket connection: ${(err as Error).message}`,
+      );
+    });
+  }
+
+  /**
+   * Triggered immediately every time the Dhan WebSocket (re)connects.
+   *
+   * This ensures instruments are subscribed right after every startup or
+   * reconnect without waiting up to 5 minutes for the first cron cycle.
+   * The cron job (`updateLiquidityRankings`) will continue to manage
+   * rotation from that point on.
+   */
+  @OnEvent('websocket.connected')
+  onWebSocketConnected(): void {
+    if (!this.isMarketHours()) {
+      this.logger.debug(
+        'SubscriptionRotation: WebSocket connected outside market hours — skipping initial subscribe',
+      );
+      return;
+    }
+
+    this.logger.log(
+      'SubscriptionRotation: WebSocket connected — triggering immediate subscription bootstrap',
+    );
+
+    void this.updateLiquidityRankings().catch((err: Error) => {
+      this.logger.error(
+        `SubscriptionRotation: initial subscription bootstrap failed: ${err.message}`,
+      );
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -133,9 +170,48 @@ export class SubscriptionRotationService implements OnModuleInit {
 
     this.logger.log('SubscriptionRotation: refreshing liquidity rankings');
 
+    // getActiveUniverse() returns instruments sorted by liquidity_score DESC
     const instruments = await this.instrumentDiscoveryService.getActiveUniverse();
 
+    // Step 1 & 2: rotate out over-capacity / low-quality subscriptions
     this.checkAndRotateSubscriptions(instruments);
+
+    // Step 3: fill available quota with the highest-scored unsubscribed
+    // instruments, batched by exchange segment in groups of 100
+    // (Dhan hard limit: 100 instruments per subscribe message).
+    const availableSlots = this.maxSubscriptions - this.subscribedSecurityIds.size;
+    if (availableSlots > 0) {
+      const toSubscribe = instruments
+        .filter(
+          (inst) =>
+            !this.subscribedSecurityIds.has(inst.securityId) &&
+            parseFloat(inst.liquidityScore ?? '0') >= this.minLiquidityScore,
+        )
+        .slice(0, availableSlots);
+
+      if (toSubscribe.length > 0) {
+        // Group by exchange segment for efficient batching
+        const bySegment = new Map<string, number[]>();
+        for (const inst of toSubscribe) {
+          const seg = inst.segment;
+          if (!bySegment.has(seg)) bySegment.set(seg, []);
+          bySegment.get(seg)!.push(parseInt(inst.securityId, 10));
+          this.subscribedSecurityIds.add(inst.securityId);
+        }
+
+        // Send in batches of 100
+        for (const [segment, ids] of bySegment) {
+          for (let i = 0; i < ids.length; i += 100) {
+            this.dhanWebSocketClient.subscribe(ids.slice(i, i + 100), segment);
+          }
+        }
+
+        this.logger.log(
+          `SubscriptionRotation: subscribed ${toSubscribe.length} new instrument(s) ` +
+            `across ${bySegment.size} segment(s)`,
+        );
+      }
+    }
 
     this.logger.log(
       `SubscriptionRotation: ranking update complete — ` +

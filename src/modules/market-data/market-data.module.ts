@@ -25,6 +25,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { NotificationModule } from '../notification/notification.module';
 import { MarketDataService } from './market-data.service';
+import { MarketDataCacheService } from './market-data-cache.service';
 
 @Module({
   imports: [
@@ -35,7 +36,12 @@ import { MarketDataService } from './market-data.service';
     // Provides NotificationService for WARNING / INFO alert publishing.
     NotificationModule,
   ],
-  providers: [MarketDataService],
-  exports: [MarketDataService],
+  providers: [
+    MarketDataService,
+    // Bridges market.tick.received → Redis mkt:snapshot:{id} cache writes.
+    // RedisService is available from the global RedisModule (AppModule).
+    MarketDataCacheService,
+  ],
+  exports: [MarketDataService, MarketDataCacheService],
 })
 export class MarketDataModule {}

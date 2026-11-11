@@ -46,6 +46,8 @@ import { DhanApiClient } from '../dhan/dhan-api.client';
 import { RiskManagementService } from '../risk-management/risk-management.service';
 import { SessionManagerService } from '../session-manager/session-manager.service';
 import { SessionPhase } from '../session-manager/session-manager.types';
+import { LiveTradingService } from '../live-trading/live-trading.service';
+import { ArmedState } from '../live-trading/live-trading.types';
 import { SecretsService } from '../secrets/secrets.service';
 import { RedisService } from '../redis/redis.service';
 import { OrderRequest, FillData, OrderModification } from './execution.types';
@@ -164,6 +166,18 @@ function makeRedisService() {
   };
 }
 
+/**
+ * Default: engine is ARMED and new entries are not blocked.
+ * Tests that exercise the armed-state gates override these individually.
+ */
+function makeLiveTradingService() {
+  return {
+    isArmed: jest.fn().mockReturnValue(true),
+    isNewEntryBlocked: jest.fn().mockReturnValue(false),
+    getArmedState: jest.fn().mockReturnValue(ArmedState.ARMED),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Test setup helper
 // ---------------------------------------------------------------------------
@@ -175,6 +189,7 @@ async function buildService(): Promise<{
   dhanApiClient: ReturnType<typeof makeDhanApiClient>;
   riskManagementService: ReturnType<typeof makeRiskManagementService>;
   sessionManagerService: ReturnType<typeof makeSessionManagerService>;
+  liveTradingService: ReturnType<typeof makeLiveTradingService>;
   secretsService: ReturnType<typeof makeSecretsService>;
   redisService: ReturnType<typeof makeRedisService>;
 }> {
@@ -183,6 +198,7 @@ async function buildService(): Promise<{
   const dhanApiClient = makeDhanApiClient();
   const riskManagementService = makeRiskManagementService();
   const sessionManagerService = makeSessionManagerService();
+  const liveTradingService = makeLiveTradingService();
   const secretsService = makeSecretsService();
   const redisService = makeRedisService();
 
@@ -194,6 +210,7 @@ async function buildService(): Promise<{
       { provide: DhanApiClient, useValue: dhanApiClient },
       { provide: RiskManagementService, useValue: riskManagementService },
       { provide: SessionManagerService, useValue: sessionManagerService },
+      { provide: LiveTradingService, useValue: liveTradingService },
       { provide: SecretsService, useValue: secretsService },
       { provide: RedisService, useValue: redisService },
     ],
@@ -206,6 +223,7 @@ async function buildService(): Promise<{
     dhanApiClient,
     riskManagementService,
     sessionManagerService,
+    liveTradingService,
     secretsService,
     redisService,
   };

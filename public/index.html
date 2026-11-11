@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MoneyPrinter — Trading Dashboard</title>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#0b0d12; --surface:#131720; --border:#1a2235;
+      --paper:#00d4aa; --paper-dim:rgba(0,212,170,.12);
+      --live:#3b82f6;  --live-dim:rgba(59,130,246,.12);
+      --success:#22c55e; --danger:#ef4444; --warn:#f59e0b;
+      --text:#dde4f0; --muted:#4b6080;
+      --font:'SF Mono','Fira Code','Consolas',monospace;
+    }
+    html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);font-size:12px;overflow:hidden}
+
+    /* ── Top bar ── */
+    .topbar{
+      display:flex;align-items:center;justify-content:space-between;
+      padding:0 20px;height:40px;background:var(--surface);
+      border-bottom:1px solid var(--border);position:sticky;top:0;z-index:200;
+    }
+    .brand{font-size:14px;font-weight:800;color:var(--paper);letter-spacing:2px}
+    .topbar-mid{display:flex;gap:16px;align-items:center}
+    .topbar-right{display:flex;gap:12px;align-items:center;font-size:11px;color:var(--muted)}
+    .dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:4px}
+    .dot-g{background:var(--success);box-shadow:0 0 5px var(--success)}
+    .dot-r{background:var(--danger);box-shadow:0 0 5px var(--danger)}
+    .dot-y{background:var(--warn);box-shadow:0 0 5px var(--warn)}
+    .regime{font-size:10px;font-weight:700;padding:2px 8px;border-radius:3px;letter-spacing:1px}
+    .r-bull{background:rgba(34,197,94,.15);color:var(--success);border:1px solid rgba(34,197,94,.25)}
+    .r-bear{background:rgba(239,68,68,.15);color:var(--danger);border:1px solid rgba(239,68,68,.25)}
+    .r-side{background:rgba(75,96,128,.15);color:var(--muted);border:1px solid rgba(75,96,128,.25)}
+    .r-vol {background:rgba(245,158,11,.15);color:var(--warn);border:1px solid rgba(245,158,11,.25)}
+
+    /* ── Engine headers ── */
+    .engine-header{
+      display:flex;align-items:center;justify-content:space-between;
+      padding:8px 14px;border-bottom:2px solid;
+    }
+    .engine-paper .engine-header{border-color:var(--paper);background:rgba(0,212,170,.05)}
+    .engine-live  .engine-header{border-color:var(--live);background:rgba(59,130,246,.05)}
+    .engine-label{font-size:11px;font-weight:800;letter-spacing:3px}
+    .engine-paper .engine-label{color:var(--paper)}
+    .engine-live  .engine-label{color:var(--live)}
+    .engine-pnl{font-size:22px;font-weight:700;line-height:1}
+    .engine-meta{font-size:10px;color:var(--muted);margin-top:2px}
+    .engine-stats{display:flex;gap:16px;text-align:center}
+    .est-val{font-size:16px;font-weight:700;color:var(--text)}
+    .est-lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-top:1px}
+    .pnl-pos{color:var(--success)} .pnl-neg{color:var(--danger)} .pnl-zero{color:var(--muted)}
+
+    /* ── Main two-col layout ── */
+    .engines{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);height:calc(100vh - 40px - 32px - 1px)}
+    .engine-col{display:flex;flex-direction:column;overflow:hidden}
+
+    /* ── Panels inside each engine ── */
+    .panel{display:flex;flex-direction:column;flex:1;min-height:0;border-top:1px solid var(--border)}
+    .panel-hdr{
+      display:flex;align-items:center;justify-content:space-between;
+      padding:6px 12px;background:var(--surface);border-bottom:1px solid var(--border);
+      font-size:9px;font-weight:700;letter-spacing:2px;color:var(--muted);text-transform:uppercase;
+      flex-shrink:0;
+    }
+    .panel-badge{
+      font-size:9px;padding:1px 5px;border-radius:2px;
+      background:var(--border);color:var(--muted);font-weight:700;
+    }
+    .panel-body{flex:1;overflow-y:auto;padding:0 12px}
+    .panel-body::-webkit-scrollbar{width:3px}
+    .panel-body::-webkit-scrollbar-thumb{background:var(--border)}
+
+    /* ── Positions table ── */
+    .ptable{width:100%;border-collapse:collapse}
+    .ptable th{font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;padding:6px 0 4px;border-bottom:1px solid var(--border);text-align:left}
+    .ptable td{padding:5px 0;font-size:11px;border-bottom:1px solid rgba(26,34,53,.6);vertical-align:middle}
+    .dir-long{color:var(--success);font-weight:700} .dir-short{color:var(--danger);font-weight:700}
+    td.pp{color:var(--success)} td.pn{color:var(--danger)}
+
+    /* ── Signal items ── */
+    .sig{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(26,34,53,.5)}
+    .sig:last-child{border-bottom:none}
+    .sig-left{flex:1;min-width:0}
+    .sig-strat{font-size:11px;font-weight:700;color:var(--accent2,#3b82f6)}
+    .sig-dir{font-size:10px;color:var(--muted)}
+    .sig-ts{font-size:10px;color:var(--muted)}
+    .sig-score{font-size:16px;font-weight:700;min-width:32px;text-align:right}
+    .sh{color:var(--success)} .sm{color:var(--warn)} .sl{color:var(--danger)}
+    .sbadge{font-size:9px;padding:1px 4px;border-radius:2px;font-weight:700;margin-left:4px}
+    .sb-active{background:rgba(34,197,94,.12);color:var(--success)}
+    .sb-accepted{background:rgba(59,130,246,.12);color:#3b82f6}
+    .sb-rejected,.sb-expired{background:rgba(75,96,128,.1);color:var(--muted)}
+
+    /* ── Live arm panel ── */
+    .arm-panel{padding:10px 12px;background:var(--surface);border-top:1px solid var(--border)}
+    .arm-state{
+      text-align:center;padding:5px;border-radius:4px;font-size:10px;font-weight:700;
+      letter-spacing:2px;margin-bottom:8px;
+    }
+    .as-dis{background:rgba(75,96,128,.1);color:var(--muted)}
+    .as-pend{background:rgba(245,158,11,.1);color:var(--warn);animation:pulse 1s infinite}
+    .as-arm{background:rgba(34,197,94,.1);color:var(--success)}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+    .btn-row{display:flex;gap:6px}
+    .btn{
+      flex:1;padding:6px 8px;border-radius:4px;border:none;font:inherit;
+      font-size:10px;font-weight:700;letter-spacing:1px;cursor:pointer;
+      text-transform:uppercase;transition:all .15s;
+    }
+    .btn-arm   {background:rgba(34,197,94,.15);color:var(--success);border:1px solid rgba(34,197,94,.3)}
+    .btn-arm:hover{background:rgba(34,197,94,.3)}
+    .btn-dis   {background:rgba(239,68,68,.12);color:var(--danger);border:1px solid rgba(239,68,68,.25)}
+    .btn-dis:hover{background:rgba(239,68,68,.25)}
+    .btn-kill  {background:rgba(239,68,68,.4);color:#fff;border:1px solid rgba(239,68,68,.6)}
+    .btn-kill:hover{background:rgba(239,68,68,.7)}
+    .btn-scan  {background:rgba(0,212,170,.12);color:var(--paper);border:1px solid rgba(0,212,170,.25)}
+    .btn-scan:hover{background:rgba(0,212,170,.25)}
+
+    /* ── Alerts ── */
+    .alert{padding:6px 10px;border-radius:3px;margin-bottom:4px;border-left:3px solid;line-height:1.4}
+    .al-MAX,.al-CRITICAL{border-color:var(--danger);background:rgba(239,68,68,.06)}
+    .al-WARNING{border-color:var(--warn);background:rgba(245,158,11,.05)}
+    .al-INFO   {border-color:#3b82f6;background:rgba(59,130,246,.05)}
+    .al-title{font-weight:700;font-size:11px;margin-bottom:1px}
+    .al-msg{color:var(--muted);font-size:10px}
+    .al-ts{color:var(--muted);font-size:9px;float:right;margin-top:-2px}
+    .empty{color:var(--muted);text-align:center;padding:20px 0;font-size:11px}
+
+    /* ── Health ── */
+    .hrow{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(26,34,53,.4)}
+    .hrow:last-child{border:none}
+    .hn{font-size:10px;color:var(--muted)}
+    .hv{font-size:10px;font-weight:700}
+    .hok{color:var(--success)} .herr{color:var(--danger)} .hwarn{color:var(--warn)}
+
+    /* ── Footer stats ── */
+    .footer{
+      display:flex;border-top:1px solid var(--border);background:var(--surface);height:32px;
+    }
+    .fstat{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;border-right:1px solid var(--border)}
+    .fstat:last-child{border-right:none}
+    .fv{font-size:13px;font-weight:700;color:var(--text)}
+    .fl{font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
+
+    /* ── Scroll ── */
+    .scroll{overflow-y:auto;flex:1}
+    .scroll::-webkit-scrollbar{width:3px}
+    .scroll::-webkit-scrollbar-thumb{background:var(--border)}
+  </style>
+</head>
+<body>
+
+<!-- ── Top bar ── -->
+<div class="topbar">
+  <div class="brand">⚡ MONEYPRINTER</div>
+  <div class="topbar-mid">
+    <span id="ws-status"><span class="dot dot-r"></span>WS Offline</span>
+    <span id="regime-badge" class="regime r-side">—</span>
+    <span id="phase-badge" style="font-size:10px;color:var(--muted)">—</span>
+  </div>
+  <div class="topbar-right">
+    <span id="clock">—</span>
+    <button class="btn btn-scan" onclick="triggerScan()" style="width:auto;padding:4px 10px;font-size:9px">↻ Scan</button>
+  </div>
+</div>
+
+<!-- ── Two-engine layout ── -->
+<div class="engines">
+
+  <!-- ══════════ PAPER ENGINE ══════════ -->
+  <div class="engine-col engine-paper">
+
+    <!-- Header -->
+    <div class="engine-header">
+      <div>
+        <div class="engine-label">📄 Paper Engine</div>
+        <div class="engine-pnl pnl-zero" id="p-pnl">₹0.00</div>
+        <div class="engine-meta">Balance: <span id="p-balance">₹50,000</span> · Trades: <span id="p-trades">0</span></div>
+      </div>
+      <div class="engine-stats">
+        <div>
+          <div class="est-val" id="p-pos-cnt">0</div>
+          <div class="est-lbl">Positions</div>
+        </div>
+        <div>
+          <div class="est-val" style="color:var(--paper)" id="p-sig-cnt">0</div>
+          <div class="est-lbl">Signals</div>
+        </div>
+        <div>
+          <div class="est-val" id="p-orders-cnt">—</div>
+          <div class="est-lbl">Orders</div>
+        </div>
+        <div>
+          <div class="est-val" id="p-fills-cnt">—</div>
+          <div class="est-lbl">Fills</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Paper Positions -->
+    <div class="panel" style="flex:1.4">
+      <div class="panel-hdr">
+        Open Positions
+        <span class="panel-badge" id="p-pos-badge">0</span>
+      </div>
+      <div class="panel-body scroll" style="padding:0 12px">
+        <table class="ptable">
+          <thead><tr>
+            <th>Instrument</th><th>Dir</th><th>Qty</th><th>Avg Entry</th><th>Unrealised</th><th>Time</th>
+          </tr></thead>
+          <tbody id="p-pos-tbody"><tr><td colspan="6" class="empty">No open positions</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Paper Signals -->
+    <div class="panel" style="flex:1">
+      <div class="panel-hdr">
+        Active Signals
+        <span class="panel-badge" id="p-sig-badge">0</span>
+      </div>
+      <div class="panel-body scroll" id="p-sig-list">
+        <div class="empty">No signals</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ══════════ LIVE ENGINE ══════════ -->
+  <div class="engine-col engine-live">
+
+    <!-- Header -->
+    <div class="engine-header">
+      <div>
+        <div class="engine-label">🔴 Live Engine</div>
+        <div class="engine-pnl pnl-zero" id="l-pnl">₹0.00</div>
+        <div class="engine-meta">Capital: <span id="l-capital">₹0</span> · Trades: <span id="l-trades">0</span></div>
+      </div>
+      <div class="engine-stats">
+        <div>
+          <div class="est-val" id="l-pos-cnt">0</div>
+          <div class="est-lbl">Positions</div>
+        </div>
+        <div>
+          <div class="est-val" style="color:var(--live)" id="l-sig-cnt">0</div>
+          <div class="est-lbl">Signals</div>
+        </div>
+        <div>
+          <div class="est-val" id="l-arm-state" style="font-size:10px;color:var(--muted)">DISARMED</div>
+          <div class="est-lbl">Engine</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Positions -->
+    <div class="panel" style="flex:.9">
+      <div class="panel-hdr">
+        Open Live Positions
+        <span class="panel-badge" id="l-pos-badge">0</span>
+      </div>
+      <div class="panel-body scroll" style="padding:0 12px">
+        <table class="ptable">
+          <thead><tr>
+            <th>Instrument</th><th>Dir</th><th>Qty</th><th>Avg Entry</th><th>Unrealised</th><th>Time</th>
+          </tr></thead>
+          <tbody id="l-pos-tbody"><tr><td colspan="6" class="empty">No live positions</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Arm / Kill controls -->
+    <div class="arm-panel">
+      <div class="arm-state as-dis" id="arm-state-label">DISARMED</div>
+      <div class="btn-row">
+        <button class="btn btn-arm" id="btn-arm1" onclick="requestArm()">① Activate</button>
+        <button class="btn btn-arm" id="btn-arm2" onclick="confirmArm()" style="display:none">② Confirm</button>
+        <button class="btn btn-dis" onclick="disarm()">Disarm</button>
+        <button class="btn btn-kill" onclick="killSwitch()">⚠ Kill</button>
+      </div>
+    </div>
+
+    <!-- Alerts + Health split -->
+    <div class="panel" style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:0">
+
+      <!-- Alerts -->
+      <div style="display:flex;flex-direction:column;border-right:1px solid var(--border)">
+        <div class="panel-hdr">Alerts <span class="panel-badge" id="alert-badge">0</span></div>
+        <div class="scroll" style="flex:1;padding:0 10px 6px" id="alert-list">
+          <div class="empty">No alerts</div>
+        </div>
+      </div>
+
+      <!-- System Health -->
+      <div style="display:flex;flex-direction:column">
+        <div class="panel-hdr">System Health</div>
+        <div class="scroll" style="flex:1;padding:6px 10px">
+          <div class="hrow"><span class="hn">WebSocket Feed</span><span class="hv" id="h-ws">—</span></div>
+          <div class="hrow"><span class="hn">Dhan API</span><span class="hv" id="h-dhan">—</span></div>
+          <div class="hrow"><span class="hn">PostgreSQL</span><span class="hv" id="h-pg">—</span></div>
+          <div class="hrow"><span class="hn">Redis</span><span class="hv" id="h-redis">—</span></div>
+          <div class="hrow"><span class="hn">Session Phase</span><span class="hv" id="h-phase">—</span></div>
+          <div class="hrow"><span class="hn">Market Data</span><span class="hv" id="h-mkt">—</span></div>
+          <div class="hrow"><span class="hn">Snapshots</span><span class="hv" id="h-snaps">—</span></div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+
+<!-- ── Footer stats ── -->
+<div class="footer">
+  <div class="fstat"><span class="fv" id="fs-evals">—</span><span class="fl">Evals</span></div>
+  <div class="fstat"><span class="fv" id="fs-orders">—</span><span class="fl">Paper Orders</span></div>
+  <div class="fstat"><span class="fv" id="fs-fills">—</span><span class="fl">Fills</span></div>
+  <div class="fstat"><span class="fv" id="fs-instr">—</span><span class="fl">Instruments</span></div>
+  <div class="fstat"><span class="fv" id="fs-scan">—</span><span class="fl">Last Scan</span></div>
+  <div class="fstat"><span class="fv" id="fs-uptime">—</span><span class="fl">Uptime</span></div>
+</div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+const API  = 'http://localhost:3002';
+const WS   = 'ws://localhost:3003';
+const POLL = 10_000;
+const startedAt = Date.now();
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let ws = null, alerts = [], paperPnlHistory = [], wsConnected = false;
+
+// ── Clock + uptime ────────────────────────────────────────────────────────────
+function tick() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleTimeString('en-IN', { timeZone:'Asia/Kolkata', hour12:false }) + ' IST';
+  const up = Math.floor((Date.now() - startedAt) / 1000);
+  const h = Math.floor(up/3600), m = Math.floor((up%3600)/60), s = up%60;
+  document.getElementById('fs-uptime').textContent =
+    `${h}h ${m.toString().padStart(2,'0')}m ${s.toString().padStart(2,'0')}s`;
+}
+setInterval(tick, 1000); tick();
+
+// ── WebSocket ─────────────────────────────────────────────────────────────────
+function connectWS() {
+  ws = new WebSocket(WS);
+  ws.onopen = () => {
+    wsConnected = true;
+    document.getElementById('ws-status').innerHTML = '<span class="dot dot-g"></span>WS Online';
+    document.getElementById('h-ws').className = 'hv hok';
+    document.getElementById('h-ws').textContent = 'Healthy';
+  };
+  ws.onmessage = e => {
+    try {
+      const { event, data } = JSON.parse(e.data);
+      if (event === 'notification' && data) pushAlert(data);
+    } catch {}
+  };
+  ws.onclose = ws.onerror = () => {
+    wsConnected = false;
+    document.getElementById('ws-status').innerHTML = '<span class="dot dot-r"></span>WS Offline';
+    document.getElementById('h-ws').className = 'hv herr';
+    document.getElementById('h-ws').textContent = 'Disconnected';
+    setTimeout(connectWS, 3000);
+  };
+}
+connectWS();
+
+// ── Fetchers ──────────────────────────────────────────────────────────────────
+async function fetchSignals() {
+  try {
+    const r = await fetch(`${API}/signals/ranked`);
+    if (!r.ok) return;
+    const signals = await r.json();
+    // All scanner signals are PAPER engine
+    const paperSigs = signals;
+    renderSignals(paperSigs);
+    document.getElementById('p-sig-cnt').textContent = paperSigs.length;
+    document.getElementById('p-sig-badge').textContent = paperSigs.length;
+    // Live signals would be engine='LIVE' — show 0 until live is armed
+    document.getElementById('l-sig-cnt').textContent = '0';
+    // Update regime from first signal
+    if (signals.length) {
+      const regime = signals[0]?.signal?.regime ?? null;
+      if (regime) updateRegime(regime);
+    }
+  } catch {}
+}
+
+async function fetchPaperPositions() {
+  try {
+    const r = await fetch(`${API}/paper-trading/positions`);
+    if (!r.ok) return;
+    const pos = await r.json();
+    renderPositions('p-pos-tbody', pos);
+    document.getElementById('p-pos-cnt').textContent = pos.length;
+    document.getElementById('p-pos-badge').textContent = pos.length;
+  } catch {}
+}
+
+async function fetchLivePositions() {
+  try {
+    // Live positions via portfolio summary (open LIVE positions from DB)
+    const r = await fetch(`${API}/portfolio/summary`);
+    if (!r.ok) return;
+    const d = await r.json();
+    // Live P&L
+    const lpnl = d.live?.netPnl ?? 0;
+    updatePnl('l-pnl', lpnl);
+    document.getElementById('l-trades').textContent = d.live?.tradeCount ?? 0;
+  } catch {}
+}
+
+async function fetchBalance() {
+  try {
+    const [br, ps] = await Promise.all([
+      fetch(`${API}/paper-trading/balance`).then(r => r.json()),
+      fetch(`${API}/portfolio/summary`).then(r => r.json()),
+    ]);
+    const bal = parseFloat(br.balance ?? '0');
+    document.getElementById('p-balance').textContent = '₹' + bal.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+    const ppnl = ps.paper?.netPnl ?? 0;
+    updatePnl('p-pnl', ppnl);
+    document.getElementById('p-trades').textContent = ps.paper?.tradeCount ?? 0;
+    document.getElementById('l-capital').textContent = '₹0';
+  } catch {}
+}
+
+async function fetchStats() {
+  try {
+    const r = await fetch(`${API}/debug/stats`);
+    if (!r.ok) return;
+    const d = await r.json();
+    document.getElementById('fs-evals').textContent  = (d.signalEvals ?? '—').toLocaleString();
+    document.getElementById('fs-orders').textContent = (d.paperOrders ?? '—').toLocaleString();
+    document.getElementById('fs-fills').textContent  = (d.paperFills ?? '—').toLocaleString();
+    document.getElementById('fs-instr').textContent  = (d.instruments ?? '—').toLocaleString();
+    document.getElementById('p-orders-cnt').textContent = d.paperOrders ?? '—';
+    document.getElementById('p-fills-cnt').textContent  = d.paperFills  ?? '—';
+  } catch {}
+}
+
+// ── Trigger scan ──────────────────────────────────────────────────────────────
+async function triggerScan() {
+  try {
+    const r = await fetch(`${API}/debug/scan`);
+    const d = await r.json();
+    const ts = new Date(d.triggeredAt).toLocaleTimeString('en-IN', { hour12:false, hour:'2-digit', minute:'2-digit' });
+    document.getElementById('fs-scan').textContent = ts;
+    toast('Scan triggered at ' + ts, '#00d4aa');
+    setTimeout(fetchAll, 4000);
+  } catch (e) { toast('Scan failed: ' + e.message, '#ef4444'); }
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderPositions(tbodyId, positions) {
+  const tbody = document.getElementById(tbodyId);
+  if (!positions.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">No open positions</td></tr>';
+    return;
+  }
+  tbody.innerHTML = positions.map(p => {
+    const pnl = parseFloat(p.unrealized_pnl || '0');
+    const pnlCls = pnl > 0 ? 'pp' : pnl < 0 ? 'pn' : '';
+    const pnlStr = (pnl >= 0 ? '+' : '') + '₹' + Math.abs(pnl).toFixed(2);
+    const entry = parseFloat(p.average_entry_price || p.averageEntryPrice || '0');
+    const id = (p.instrument_id || p.instrumentId || '').slice(0,8);
+    const opened = p.opened_at ? new Date(p.opened_at).toLocaleTimeString('en-IN', {hour12:false,hour:'2-digit',minute:'2-digit'}) : '—';
+    const dirCls = p.direction === 'LONG' ? 'dir-long' : 'dir-short';
+    const dirTxt = p.direction === 'LONG' ? '▲ L' : '▼ S';
+    return `<tr>
+      <td style="font-size:10px;font-family:monospace">${esc(id)}…</td>
+      <td class="${dirCls}">${dirTxt}</td>
+      <td>${p.quantity}</td>
+      <td>₹${entry.toFixed(2)}</td>
+      <td class="${pnlCls}">${pnlStr}</td>
+      <td style="color:var(--muted)">${opened}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderSignals(signals) {
+  const el = document.getElementById('p-sig-list');
+  if (!signals.length) { el.innerHTML = '<div class="empty">No active signals</div>'; return; }
+  el.innerHTML = signals.slice(0, 25).map(item => {
+    const s = item.signal;
+    const score = parseFloat(s.compositeScore);
+    const sc = score >= 85 ? 'sh' : score >= 80 ? 'sm' : 'sl';
+    const ts = new Date(s.signalTimestamp).toLocaleTimeString('en-IN', {hour12:false,hour:'2-digit',minute:'2-digit'});
+    const strat = s.strategy?.code ?? '?';
+    const reg = s.regime ?? '—';
+    const ep = parseFloat(s.entryPrice || '0').toFixed(1);
+    return `<div class="sig">
+      <div class="sig-left">
+        <div><span class="sig-strat">${esc(strat)}</span><span class="sbadge sb-${s.status}">${s.status}</span></div>
+        <div class="sig-dir">${s.direction} · ₹${ep} · R:R ${item.expectedValue?.toFixed(1) ?? '—'}</div>
+        <div class="sig-ts">${ts} · ${esc(reg)} · rank #${item.rank}</div>
+      </div>
+      <div class="sig-score ${sc}">${score.toFixed(0)}</div>
+    </div>`;
+  }).join('');
+}
+
+function pushAlert(a) {
+  alerts.unshift(a);
+  if (alerts.length > 30) alerts.pop();
+  renderAlerts();
+  document.getElementById('alert-badge').textContent = alerts.length;
+}
+
+function renderAlerts() {
+  const el = document.getElementById('alert-list');
+  if (!alerts.length) { el.innerHTML = '<div class="empty">No alerts</div>'; return; }
+  el.innerHTML = alerts.slice(0, 15).map(a => {
+    const ts = new Date(a.createdAt || Date.now()).toLocaleTimeString('en-IN', {hour12:false});
+    return `<div class="alert al-${a.priority}">
+      <span class="al-ts">${ts}</span>
+      <div class="al-title">${esc(a.title ?? '')}</div>
+      <div class="al-msg">${esc((a.message ?? '').slice(0, 100))}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function updatePnl(id, val) {
+  const el = document.getElementById(id);
+  el.textContent = (val >= 0 ? '+' : '') + '₹' + Math.abs(val).toLocaleString('en-IN', {minimumFractionDigits:2});
+  el.className = 'engine-pnl ' + (val > 0 ? 'pnl-pos' : val < 0 ? 'pnl-neg' : 'pnl-zero');
+}
+
+function updateRegime(r) {
+  const el = document.getElementById('regime-badge');
+  el.textContent = r;
+  const u = r.toUpperCase();
+  el.className = 'regime ' + (u.includes('BULL') ? 'r-bull' : u.includes('BEAR') ? 'r-bear' :
+                              u.includes('VOL') || u.includes('HIGH') ? 'r-vol' : 'r-side');
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function toast(msg, color) {
+  const el = document.createElement('div');
+  el.style.cssText = `position:fixed;bottom:40px;right:20px;padding:8px 14px;border-radius:4px;
+    font:700 11px/1 var(--font);z-index:9999;background:${color};color:#fff;
+    box-shadow:0 4px 12px rgba(0,0,0,.5);max-width:280px;animation:fadeIn .2s;`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+// ── Arm/Disarm ────────────────────────────────────────────────────────────────
+let armedState = 'DISARMED';
+let _csrf = null;
+
+async function csrf() {
+  if (_csrf) return _csrf;
+  await fetch(`${API}/`);
+  const c = document.cookie.split(';').find(c => c.trim().startsWith('csrf-token='));
+  _csrf = c ? c.split('=')[1].trim() : '';
+  return _csrf;
+}
+
+async function arm(endpoint) {
+  try {
+    const r = await fetch(`${API}${endpoint}`, { method:'POST', headers:{'X-CSRF-Token': await csrf()} });
+    if (!r.ok) throw new Error(await r.text());
+  } catch (e) { toast(e.message, '#ef4444'); }
+}
+
+async function requestArm() {
+  await arm('/live-trading/arm/request');
+  setArmState('ARMED_PENDING');
+}
+async function confirmArm() {
+  await arm('/live-trading/arm/confirm');
+  setArmState('ARMED');
+}
+async function disarm() {
+  await arm('/live-trading/arm/disarm');
+  setArmState('DISARMED');
+}
+async function killSwitch() {
+  if (!confirm('⚠ Activate KILL SWITCH? All orders cancelled, all positions closed.')) return;
+  await arm('/live-trading/kill-switch');
+  toast('Kill switch activated', '#ef4444');
+  setArmState('DISARMED');
+}
+
+function setArmState(s) {
+  armedState = s;
+  const lbl = document.getElementById('arm-state-label');
+  const topLbl = document.getElementById('l-arm-state');
+  const btn2 = document.getElementById('btn-arm2');
+  if (s === 'DISARMED') {
+    lbl.className = 'arm-state as-dis'; lbl.textContent = 'DISARMED';
+    topLbl.textContent = 'DISARMED'; topLbl.style.color = 'var(--muted)';
+    btn2.style.display = 'none';
+  } else if (s === 'ARMED_PENDING') {
+    lbl.className = 'arm-state as-pend'; lbl.textContent = '⏳ PENDING CONFIRMATION';
+    topLbl.textContent = 'PENDING'; topLbl.style.color = 'var(--warn)';
+    btn2.style.display = '';
+  } else {
+    lbl.className = 'arm-state as-arm'; lbl.textContent = '✓ ARMED — LIVE ACTIVE';
+    topLbl.textContent = 'ARMED'; topLbl.style.color = 'var(--success)';
+    btn2.style.display = 'none';
+  }
+}
+
+// ── Health update ─────────────────────────────────────────────────────────────
+async function fetchHealth() {
+  try {
+    const r = await fetch(`${API}/health`);
+    if (!r.ok) return;
+    const d = await r.json();
+    function hv(id, ok) {
+      const el = document.getElementById(id);
+      el.textContent = ok ? 'Healthy' : 'Error';
+      el.className = 'hv ' + (ok ? 'hok' : 'herr');
+    }
+    hv('h-dhan', d.info?.dhan_api_connectivity?.status === 'up');
+    hv('h-pg',   d.info?.postgresql_connection?.status  === 'up');
+    hv('h-redis',d.info?.redis_availability?.status     === 'up');
+  } catch {}
+}
+
+// phase from Redis via signal data
+async function fetchPhase() {
+  try {
+    const r = await fetch(`${API}/signals/ranked`);
+    if (!r.ok) return;
+    // phase displayed from topbar
+  } catch {}
+}
+
+// ── Main loop ─────────────────────────────────────────────────────────────────
+async function fetchAll() {
+  await Promise.allSettled([
+    fetchSignals(),
+    fetchPaperPositions(),
+    fetchLivePositions(),
+    fetchBalance(),
+    fetchStats(),
+    fetchHealth(),
+  ]);
+}
+
+fetchAll();
+setInterval(fetchAll, POLL);
+</script>
+</body>
+</html>

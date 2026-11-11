@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import { RedisService } from '../redis/redis.service';
-import { MarketSnapshot } from './market-data.types';
+import { MarketSnapshot, MARKET_TICK_RECEIVED_EVENT } from './market-data.types';
+import { DhanTickData } from '../dhan/dhan-websocket.client';
 
 /**
  * TTL constants (seconds) for every Redis key written by MarketDataCacheService.
@@ -39,6 +41,58 @@ export class MarketDataCacheService {
   private readonly logger = new Logger(MarketDataCacheService.name);
 
   constructor(private readonly redisService: RedisService) {}
+
+  // --------------------------------------------------------------------------
+  // Tick ingestion — market.tick.received → Redis
+  // --------------------------------------------------------------------------
+
+  /**
+   * Bridge between the Dhan WebSocket feed and the Redis market-data cache.
+   *
+   * Listens to every `market.tick.received` event emitted by
+   * DhanWebSocketClient and writes a {@link MarketSnapshot} to Redis for
+   * downstream consumers (PaperEngine, PositionMonitor, SignalScoring…).
+   *
+   * Only ticks that carry a Last Traded Price are cached — standalone OI
+   * packets (response code 5) and Prev-Close packets (code 6) have no LTP
+   * and are skipped to avoid overwriting a valid snapshot with partial data.
+   *
+   * Key:  `mkt:snapshot:{securityId}`
+   * TTL:  2 s (CACHE_TTL.MARKET_SNAPSHOT) — matches the tick rate.
+   *
+   * Requirements: 18.7
+   */
+  @OnEvent(MARKET_TICK_RECEIVED_EVENT)
+  onTickReceived(tick: DhanTickData): void {
+    // Skip packets without LTP (OI-only, PrevClose, etc.)
+    if (tick.lastTradedPrice == null) return;
+
+    const instrumentId = String(tick.securityId);
+
+    // Extract best bid/ask from depth level 0 if present (Full packet)
+    const depth = tick.depth as Array<{ bidPrice: number; askPrice: number }> | undefined;
+    const bidPrice = depth?.[0]?.bidPrice != null ? String(depth[0].bidPrice) : null;
+    const askPrice = depth?.[0]?.askPrice != null ? String(depth[0].askPrice) : null;
+
+    const snapshot: MarketSnapshot = {
+      ltp: String(tick.lastTradedPrice),
+      bidPrice,
+      askPrice,
+      volume: String((tick.volume as number | undefined) ?? 0),
+      oi:
+        (tick.openInterest as number | undefined) != null
+          ? String(tick.openInterest as number)
+          : null,
+      // Dhan LTT is epoch seconds; MarketSnapshot uses epoch milliseconds
+      timestamp: tick.timestamp ? (tick.timestamp as number) * 1_000 : Date.now(),
+    };
+
+    // Fire-and-forget — errors are caught and logged; never rethrow on a
+    // hot event path that fires hundreds of times per second.
+    this.cacheMarketSnapshot(instrumentId, snapshot).catch((err: Error) => {
+      this.logger.error(`Failed to cache snapshot for ${instrumentId}: ${err.message}`);
+    });
+  }
 
   // --------------------------------------------------------------------------
   // Write methods

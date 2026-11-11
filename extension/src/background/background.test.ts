@@ -149,6 +149,7 @@ describe('Background Service Worker', () => {
           type: 'RECOVERY_NOTIFICATION',
           message: 'Manual re-authorization required',
         }),
+        expect.any(Function), // callback to consume chrome.runtime.lastError
       );
     });
 
@@ -164,6 +165,7 @@ describe('Background Service Worker', () => {
       expect(getCurrentState()).toEqual(INITIAL_STATE);
       expect(sendMessageMock()).toHaveBeenCalledWith(
         expect.objectContaining({ message: 'Manual re-authorization required' }),
+        expect.any(Function),
       );
     });
   });

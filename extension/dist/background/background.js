@@ -96,6 +96,19 @@
     socket.addEventListener("open", () => {
       updateState({ connectionState: "connected" }).catch(() => {
       });
+      startSignalPolling();
+    });
+    socket.addEventListener("message", (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.event === "notification") {
+          const alert = msg.data;
+          chrome.runtime.sendMessage({ type: "ALERT", payload: alert }, () => {
+            void chrome.runtime.lastError;
+          });
+        }
+      } catch {
+      }
     });
     socket.addEventListener("close", () => {
       if (activeSocket === socket) {
@@ -103,6 +116,7 @@
       }
       updateState({ connectionState: "disconnected" }).catch(() => {
       });
+      stopSignalPolling();
       setTimeout(() => connectWebSocket(url), RECONNECT_DELAY_MS);
     });
     socket.addEventListener("error", () => {
@@ -111,14 +125,14 @@
       }
       updateState({ connectionState: "disconnected" }).catch(() => {
       });
+      stopSignalPolling();
     });
     return socket;
   }
   function notifyUser(message) {
-    try {
-      chrome.runtime.sendMessage({ type: "RECOVERY_NOTIFICATION", message });
-    } catch {
-    }
+    chrome.runtime.sendMessage({ type: "RECOVERY_NOTIFICATION", message }, () => {
+      void chrome.runtime.lastError;
+    });
   }
   function _resetStateForTesting() {
     currentState = { ...INITIAL_STATE };
@@ -181,6 +195,69 @@
       // Extended in future via /portfolio/positions
       healthStatus: "Healthy"
     };
+  }
+  async function fetchAndBroadcastPositions() {
+    try {
+      const res = await fetch(`${DEFAULT_HTTP_URL}/paper-trading/positions`);
+      if (!res.ok) return;
+      const positions = await res.json();
+      for (const p of positions) {
+        const entryPrice = parseFloat(p.average_entry_price);
+        const unrealized = parseFloat(p.unrealized_pnl);
+        const currentPrice = unrealized !== 0 ? entryPrice + unrealized / p.quantity : entryPrice;
+        const payload = {
+          id: p.id,
+          symbol: p.instrument_id.slice(0, 8),
+          // short display until symbol lookup added
+          entryPrice,
+          currentPrice,
+          unrealizedPnl: unrealized,
+          direction: p.direction
+        };
+        chrome.runtime.sendMessage({ type: "POSITION_UPDATE", payload }, () => {
+          void chrome.runtime.lastError;
+        });
+      }
+    } catch {
+    }
+  }
+  async function fetchAndBroadcastSignals() {
+    try {
+      const res = await fetch(`${DEFAULT_HTTP_URL}/signals/ranked`);
+      if (!res.ok) return;
+      const ranked = await res.json();
+      for (const item of ranked) {
+        const sig = item.signal;
+        const payload = {
+          id: sig.id,
+          strategyCode: sig.strategy?.code ?? "N/A",
+          score: Math.round(parseFloat(sig.compositeScore)),
+          status: sig.status,
+          timestamp: new Date(sig.signalTimestamp),
+          rejectionReason: sig.rejectionReason ?? void 0
+        };
+        chrome.runtime.sendMessage({ type: "SIGNAL_UPDATE", payload }, () => {
+          void chrome.runtime.lastError;
+        });
+      }
+    } catch {
+    }
+  }
+  var signalPollInterval = null;
+  function startSignalPolling() {
+    if (signalPollInterval !== null) return;
+    void fetchAndBroadcastSignals();
+    void fetchAndBroadcastPositions();
+    signalPollInterval = setInterval(() => {
+      void fetchAndBroadcastSignals();
+      void fetchAndBroadcastPositions();
+    }, 15e3);
+  }
+  function stopSignalPolling() {
+    if (signalPollInterval !== null) {
+      clearInterval(signalPollInterval);
+      signalPollInterval = null;
+    }
   }
   chrome.runtime.onInstalled.addListener(async () => {
     await recoverState();

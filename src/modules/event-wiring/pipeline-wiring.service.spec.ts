@@ -14,6 +14,7 @@
  */
 
 import { Test, TestingModule } from '@nestjs/testing';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PipelineWiringService } from './pipeline-wiring.service';
 import { SignalScoringService } from '../signal-scoring/signal-scoring.service';
 import { DailyLossStateMachineService } from '../risk-management/daily-loss-state-machine.service';
@@ -75,12 +76,16 @@ async function buildService(
   service: PipelineWiringService;
   signalScoring: ReturnType<typeof buildMockSignalScoringService>;
   dailyLoss: ReturnType<typeof buildMockDailyLossStateMachineService>;
+  eventEmitter: jest.Mocked<Pick<EventEmitter2, 'emit'>>;
 }> {
+  const eventEmitter = { emit: jest.fn() };
+
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       PipelineWiringService,
       { provide: SignalScoringService, useValue: signalScoringMock },
       { provide: DailyLossStateMachineService, useValue: dailyLossMock },
+      { provide: EventEmitter2, useValue: eventEmitter },
     ],
   }).compile();
 
@@ -88,6 +93,7 @@ async function buildService(
     service: module.get(PipelineWiringService),
     signalScoring: signalScoringMock,
     dailyLoss: dailyLossMock,
+    eventEmitter: eventEmitter as jest.Mocked<Pick<EventEmitter2, 'emit'>>,
   };
 }
 

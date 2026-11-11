@@ -33,25 +33,16 @@ import { UserSettings } from '../../database/entities/user-settings.entity';
 
 import { TradingChargesModule } from '../charges/trading-charges.module';
 import { PaperTradingService } from './paper-trading.service';
+import { PaperTradingController } from './paper-trading.controller';
 
 @Module({
   imports: [
-    // ── Dedicated paper-table repositories (Requirement 10.1) ────────────────
-    // Only paper_ prefixed tables are registered here. Live engine tables
-    // (orders, executions, positions, trades) are explicitly NOT included.
     TypeOrmModule.forFeature([PaperOrder, PaperExecution, PaperPosition, PaperTrade]),
-    // Shared charge-calculation service (single source of truth for NSE F&O costs).
     TradingChargesModule,
-    // UserSettings — read paper starting capital from DB (not hardcoded).
     TypeOrmModule.forFeature([UserSettings]),
-    // RedisModule is registered globally in AppModule — no re-import needed.
-    // PaperTradingService injects RedisService via the global provider.
   ],
-  providers: [
-    // The PaperTradingService is the sole provider. No live engine services,
-    // shared middleware, or message handlers from LiveEngine are included.
-    PaperTradingService,
-  ],
+  controllers: [PaperTradingController],
+  providers: [PaperTradingService],
   exports: [PaperTradingService],
 })
 export class PaperTradingModule {}

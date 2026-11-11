@@ -19,6 +19,19 @@ import { CsrfMiddleware } from './common/middleware/csrf.middleware';
 import { PipelineWiringModule } from './modules/event-wiring/pipeline-wiring.module';
 import { JournalWiringModule } from './modules/event-wiring/journal-wiring.module';
 import { PortfolioModule } from './modules/portfolio/portfolio.module';
+// ── Core trading modules (required for the bot to function) ─────────────
+import { StrategyModule } from './modules/strategy/strategy.module';
+import { InstrumentDiscoveryModule } from './modules/instrument-discovery/instrument-discovery.module';
+import { MarketDataModule } from './modules/market-data/market-data.module';
+import { MarketRegimeModule } from './modules/market-regime/market-regime.module';
+import { TechnicalAnalysisModule } from './modules/technical-analysis/technical-analysis.module';
+import { OptionsIntelligenceModule } from './modules/options-intelligence/options-intelligence.module';
+import { ExecutionModule } from './modules/execution/execution.module';
+import { PaperTradingModule } from './modules/paper-trading/paper-trading.module';
+import { ReconciliationModule } from './modules/reconciliation/reconciliation.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { ComplianceModule } from './modules/compliance/compliance.module';
+import { SignalScannerModule } from './modules/signal-scanner/signal-scanner.module';
 
 /**
  * Root application module.
@@ -131,6 +144,34 @@ import { PortfolioModule } from './modules/portfolio/portfolio.module';
     // GET /portfolio/summary endpoint for Chrome Extension P&L display.
     PortfolioModule,
 
+    // ── Core trading pipeline ─────────────────────────────────────────────
+    // Market data feed — processes Dhan WebSocket ticks, publishes to Redis.
+    MarketDataModule,
+    // Market regime — 10-regime classification every ≤60s, VIX override.
+    MarketRegimeModule,
+    // Technical analysis — VWAP, ATR, EMA(9/21/50/200), ORB, MACD, RSI.
+    TechnicalAnalysisModule,
+    // Options intelligence — Greeks cache, IV regime, getActiveExpiries().
+    OptionsIntelligenceModule,
+    // Instrument discovery — 09:15 IST scan; options-only allowlist; OI/ADV filters.
+    InstrumentDiscoveryModule,
+    // Strategy — seeds 8 strategy configs (A–H) on startup; 5-gate signal evaluation.
+    StrategyModule,
+    // Execution — 5-check pre-trade chain, Dhan order placement, idempotency.
+    ExecutionModule,
+    // Paper trading — fully isolated paper engine; options-buying only; ₹50K default.
+    PaperTradingModule,
+    // Reconciliation — EOD reconciliation, reconnection, SL verification.
+    ReconciliationModule,
+    // Analytics — 12 metrics, attribution, QCR, Daily Intelligence Report.
+    AnalyticsModule,
+    // Compliance — 4 profitability gates, Monte Carlo ≥95%.
+    ComplianceModule,
+    // Signal Scanner — cron-based scanner that evaluates live market snapshots
+    // and routes accepted signals (score ≥ 80) to paper/live execution.
+    // Closes the missing pipeline link: market data → signals → trades.
+    SignalScannerModule,
+
     // Redis channel wiring — bridges events:regime_change and events:session_phase
     // pub/sub channels to in-process service handlers; also ensures
     // PositionMonitoringService tick subscriptions are active on startup
@@ -179,6 +220,11 @@ export class AppModule implements NestModule {
         { path: 'settings', method: RequestMethod.GET },
         { path: 'settings', method: RequestMethod.PUT },
         { path: 'portfolio/summary', method: RequestMethod.GET },
+        { path: 'paper-trading/positions', method: RequestMethod.GET },
+        { path: 'paper-trading/balance', method: RequestMethod.GET },
+        { path: 'signals/ranked', method: RequestMethod.GET },
+        { path: 'debug/scan', method: RequestMethod.GET },
+        { path: 'debug/stats', method: RequestMethod.GET },
       )
       .forRoutes('*');
   }
