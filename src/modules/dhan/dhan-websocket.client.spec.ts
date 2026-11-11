@@ -93,9 +93,46 @@ function emitClose(ws: MockWsInstance = latestWs(), code = 1006, reason = ''): v
   ws.emit('close', code, Buffer.from(reason));
 }
 
-/** Simulate an incoming tick message. */
-function emitMessage(payload: Record<string, unknown>, ws: MockWsInstance = latestWs()): void {
-  ws.emit('message', Buffer.from(JSON.stringify(payload)));
+/**
+ * Build a Dhan v2 binary Ticker packet (response code 2, 16 bytes, little-endian).
+ *
+ * Layout:
+ *   [0]     uint8  — response code (2 = Ticker)
+ *   [1-2]   int16  — message length (16)
+ *   [3]     uint8  — exchange segment (2 = NSE_FNO)
+ *   [4-7]   int32  — security ID (LE)
+ *   [8-11]  float32 — LTP (LE)
+ *   [12-15] int32  — LTT / epoch (LE)
+ */
+function makeBinaryTicker(
+  securityId: number,
+  ltp = 0,
+  ltt = 0,
+  exchangeSegment = 2 /* NSE_FNO */,
+): Buffer {
+  const buf = Buffer.alloc(16, 0);
+  buf.writeUInt8(2, 0); // response code: Ticker
+  buf.writeInt16LE(16, 1); // total message length
+  buf.writeUInt8(exchangeSegment, 3); // exchange segment
+  buf.writeInt32LE(securityId, 4); // security ID
+  buf.writeFloatLE(ltp, 8); // last traded price
+  buf.writeInt32LE(ltt, 12); // last traded time (epoch)
+  return buf;
+}
+
+/**
+ * Simulate an incoming binary tick message using the Dhan v2 Ticker packet
+ * format (little-endian binary, NOT JSON).
+ */
+function emitMessage(
+  payload: { securityId?: number; lastTradedPrice?: number; [key: string]: unknown },
+  ws: MockWsInstance = latestWs(),
+): void {
+  const buf = makeBinaryTicker(
+    typeof payload.securityId === 'number' ? payload.securityId : 0,
+    typeof payload.lastTradedPrice === 'number' ? payload.lastTradedPrice : 0,
+  );
+  ws.emit('message', buf);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

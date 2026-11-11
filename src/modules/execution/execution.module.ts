@@ -27,6 +27,7 @@ import { Execution } from '../../database/entities/executions.entity';
 import { DhanApiModule } from '../dhan/dhan-api.module';
 import { RiskManagementModule } from '../risk-management/risk-management.module';
 import { SessionManagerModule } from '../session-manager/session-manager.module';
+import { LiveTradingModule } from '../live-trading/live-trading.module';
 import { ExecutionService } from './execution.service';
 
 @Module({
@@ -39,6 +40,10 @@ import { ExecutionService } from './execution.service';
 
     // Provides SessionManagerService for session-phase timing checks.
     SessionManagerModule,
+
+    // Provides LiveTradingService for armed-state and new-entry-blocked checks
+    // (Requirements 11.1, 11.3 — LIVE orders must not be submitted when DISARMED).
+    LiveTradingModule,
 
     // Registers Orders and Executions TypeORM repositories.
     TypeOrmModule.forFeature([Order, Execution]),

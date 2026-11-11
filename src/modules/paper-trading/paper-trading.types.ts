@@ -174,6 +174,14 @@ export interface PaperOrderRequest {
    */
   signalScore?: number;
   /**
+   * Optional Redis key suffix for the market snapshot lookup.
+   * When provided, `mkt:snapshot:{marketDataKey}` is used instead of
+   * `mkt:snapshot:{instrumentId}`, which allows callers to pass the Dhan
+   * securityId (the actual Redis key) while `instrumentId` remains the DB UUID.
+   * If omitted, `instrumentId` is used as-is (backward compatible).
+   */
+  marketDataKey?: string;
+  /**
    * Slippage configuration override.
    * Defaults to fixed_rupee with fixedRupee = 0.00.
    */

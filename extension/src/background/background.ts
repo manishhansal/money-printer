@@ -133,6 +133,30 @@ export function connectWebSocket(url: string = DEFAULT_WSS_URL): WebSocket | nul
 
   socket.addEventListener('open', () => {
     updateState({ connectionState: 'connected' }).catch(() => {/* ignore */});
+    // Start polling for signals now that the connection is live
+    startSignalPolling();
+  });
+
+  socket.addEventListener('message', (event: MessageEvent<string>) => {
+    try {
+      const msg = JSON.parse(event.data) as { event: string; data: unknown };
+
+      if (msg.event === 'notification') {
+        const alert = msg.data as {
+          id: string;
+          priority: string;
+          title: string;
+          message: string;
+          createdAt: string;
+        };
+        // Relay the alert to the sidepanel's alert queue
+        chrome.runtime.sendMessage({ type: 'ALERT', payload: alert }, () => {
+          void chrome.runtime.lastError;
+        });
+      }
+    } catch {
+      // Malformed message — ignore
+    }
   });
 
   socket.addEventListener('close', () => {
@@ -140,6 +164,7 @@ export function connectWebSocket(url: string = DEFAULT_WSS_URL): WebSocket | nul
       activeSocket = null;
     }
     updateState({ connectionState: 'disconnected' }).catch(() => {/* ignore */});
+    stopSignalPolling();
     // Reconnect after delay
     setTimeout(() => connectWebSocket(url), RECONNECT_DELAY_MS);
   });
@@ -149,6 +174,7 @@ export function connectWebSocket(url: string = DEFAULT_WSS_URL): WebSocket | nul
       activeSocket = null;
     }
     updateState({ connectionState: 'disconnected' }).catch(() => {/* ignore */});
+    stopSignalPolling();
   });
 
   return socket;
@@ -159,13 +185,15 @@ export function connectWebSocket(url: string = DEFAULT_WSS_URL): WebSocket | nul
 /**
  * Send a notification message to the Extension popup / side-panel.
  * Silently swallowed if no listeners are registered (UI not open).
+ * Uses the callback form with chrome.runtime.lastError to suppress the
+ * "Receiving end does not exist" error that fires in MV3 when no page listens.
  */
 function notifyUser(message: string): void {
-  try {
-    chrome.runtime.sendMessage({ type: 'RECOVERY_NOTIFICATION', message });
-  } catch {
-    // Popup / side-panel not open — no-op
-  }
+  chrome.runtime.sendMessage({ type: 'RECOVERY_NOTIFICATION', message }, () => {
+    // Access lastError to prevent Chrome from logging the unhandled error
+    // when the popup / side-panel is not currently open.
+    void chrome.runtime.lastError;
+  });
 }
 
 // ─── Test-only reset helper ────────────────────────────────────────────────────
@@ -281,6 +309,121 @@ async function fetchSessionPnl(): Promise<{
     activePositionsCount: 0, // Extended in future via /portfolio/positions
     healthStatus: 'Healthy',
   };
+}
+
+/**
+ * Fetch open paper positions and broadcast each as a POSITION_UPDATE message
+ * to the sidepanel so the LIVE POSITIONS table stays current.
+ *
+ * Maps paper position fields to the sidepanel's Position interface.
+ */
+async function fetchAndBroadcastPositions(): Promise<void> {
+  try {
+    const res = await fetch(`${DEFAULT_HTTP_URL}/paper-trading/positions`);
+    if (!res.ok) return;
+
+    const positions = (await res.json()) as Array<{
+      id: string;
+      instrument_id: string;
+      direction: 'LONG' | 'SHORT';
+      quantity: number;
+      average_entry_price: string;
+      unrealized_pnl: string;
+    }>;
+
+    for (const p of positions) {
+      const entryPrice = parseFloat(p.average_entry_price);
+      const unrealized = parseFloat(p.unrealized_pnl);
+      const currentPrice = unrealized !== 0
+        ? entryPrice + unrealized / p.quantity
+        : entryPrice;
+
+      const payload = {
+        id: p.id,
+        symbol: p.instrument_id.slice(0, 8), // short display until symbol lookup added
+        entryPrice,
+        currentPrice,
+        unrealizedPnl: unrealized,
+        direction: p.direction,
+      };
+      chrome.runtime.sendMessage({ type: 'POSITION_UPDATE', payload }, () => {
+        void chrome.runtime.lastError;
+      });
+    }
+  } catch {
+    // Network unavailable — ignore
+  }
+}
+
+// ─── Signal polling ────────────────────────────────────────────────────────────
+
+/**
+ * Fetch the ranked signal list from GET /signals/ranked and broadcast each
+ * signal as a SIGNAL_UPDATE message to all extension pages (sidepanel, popup).
+ *
+ * This endpoint is public (no JWT required) so it works even before login.
+ * Called on WebSocket connect and every 30 seconds while connected.
+ */
+async function fetchAndBroadcastSignals(): Promise<void> {
+  try {
+    const res = await fetch(`${DEFAULT_HTTP_URL}/signals/ranked`);
+    if (!res.ok) return;
+
+    const ranked = (await res.json()) as Array<{
+      signal: {
+        id: string;
+        compositeScore: string;
+        status: string;
+        rejectionReason?: string | null;
+        signalTimestamp: string;
+        strategy?: { code: string };
+      };
+      rank: number;
+    }>;
+
+    for (const item of ranked) {
+      const sig = item.signal;
+      const payload = {
+        id: sig.id,
+        strategyCode: sig.strategy?.code ?? 'N/A',
+        score: Math.round(parseFloat(sig.compositeScore)),
+        status: sig.status as 'active' | 'rejected' | 'expired',
+        timestamp: new Date(sig.signalTimestamp),
+        rejectionReason: sig.rejectionReason ?? undefined,
+      };
+      // Relay each signal to the sidepanel via chrome message.
+      // Use callback form to consume chrome.runtime.lastError and suppress
+      // the "Receiving end does not exist" error when no page is open.
+      chrome.runtime.sendMessage({ type: 'SIGNAL_UPDATE', payload }, () => {
+        void chrome.runtime.lastError;
+      });
+    }
+  } catch {
+    // Network unavailable — ignore
+  }
+}
+
+/** Interval handle for the signal polling loop (null when not connected). */
+let signalPollInterval: ReturnType<typeof setInterval> | null = null;
+
+/** Start polling for signals and positions every 15 seconds. */
+function startSignalPolling(): void {
+  if (signalPollInterval !== null) return; // already running
+  // Immediate fetches on connect
+  void fetchAndBroadcastSignals();
+  void fetchAndBroadcastPositions();
+  signalPollInterval = setInterval(() => {
+    void fetchAndBroadcastSignals();
+    void fetchAndBroadcastPositions();
+  }, 15_000); // 15 s — snappy enough for live P&L updates
+}
+
+/** Stop the signal polling loop. */
+function stopSignalPolling(): void {
+  if (signalPollInterval !== null) {
+    clearInterval(signalPollInterval);
+    signalPollInterval = null;
+  }
 }
 
 chrome.runtime.onInstalled.addListener(async () => {

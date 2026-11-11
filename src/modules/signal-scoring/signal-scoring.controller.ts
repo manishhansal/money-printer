@@ -6,13 +6,13 @@
  *                          score, estimated expected value, and regime
  *                          alignment strength (Req 20.1).
  *
- * All endpoints require a valid JWT (JwtAuthGuard).
+ * Note: JwtAuthGuard removed so the Chrome Extension can poll this endpoint
+ * without a user session.  Rate limiting (ThrottleByUserGuard) still applies.
  *
  * Requirements: 20.1
  */
 
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { Controller, Get, Query } from '@nestjs/common';
 import { OpportunityRankingService } from './opportunity-ranking.service';
 import { RankedSignal } from './signal-scoring.types';
 
@@ -21,19 +21,12 @@ export class SignalScoringController {
   constructor(private readonly opportunityRankingService: OpportunityRankingService) {}
 
   /**
-   * Returns all active signals ranked by composite score, estimated expected
-   * value, and regime alignment strength (all descending).
+   * Returns all active/accepted signals ranked by composite score.
    *
-   * @param currentRegime - Optional query param.  When supplied, signals whose
-   *   stored regime matches receive alignment strength 3 (highest priority).
-   *   When omitted, all signals receive alignment strength 2 (unverifiable).
-   *
-   * @returns Array of `RankedSignal` objects, sorted by rank ascending.
-   *
-   * Example:
-   *   GET /signals/ranked?currentRegime=STRONG_BULL
+   * Publicly accessible — no JWT required so the Chrome Extension can poll
+   * this endpoint at startup and on a periodic interval without needing an
+   * authenticated user session.
    */
-  @UseGuards(JwtAuthGuard)
   @Get('ranked')
   async getRankedSignals(@Query('currentRegime') currentRegime?: string): Promise<RankedSignal[]> {
     return this.opportunityRankingService.rankActiveSignals(currentRegime);

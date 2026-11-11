@@ -70,11 +70,50 @@ const MAX_CONSECUTIVE_FAILURES = 5;
 /** First-tick SLA window in milliseconds (Requirement 3.4). */
 const FIRST_TICK_SLA_MS = 3_000;
 
-/** Dhan market feed request code: subscribe. */
-const SUBSCRIBE_REQUEST_CODE = 21;
+/**
+ * Dhan v2 Feed Request Codes (from Annexure):
+ *   15 = Subscribe Ticker, 16 = Unsubscribe Ticker
+ *   17 = Subscribe Quote,  18 = Unsubscribe Quote
+ *   21 = Subscribe Full,   22 = Unsubscribe Full
+ *
+ * Full packet (21) is used so the bot receives LTP, Volume, OI and Market
+ * Depth in one message — required for options signal generation.
+ */
+const SUBSCRIBE_REQUEST_CODE = 21; // Subscribe - Full Packet
 
-/** Dhan market feed request code: unsubscribe. */
+/** Dhan market feed request code: unsubscribe Full Packet. */
 const UNSUBSCRIBE_REQUEST_CODE = 22;
+
+/**
+ * Dhan v2 Feed Response Codes (binary header byte 0):
+ *   1 = Index, 2 = Ticker, 4 = Quote, 5 = OI,
+ *   6 = Prev Close, 7 = Market Status, 8 = Full, 50 = Disconnect
+ */
+const FEED_RESPONSE_CODE = {
+  INDEX: 1,
+  TICKER: 2,
+  QUOTE: 4,
+  OI: 5,
+  PREV_CLOSE: 6,
+  MARKET_STATUS: 7,
+  FULL: 8,
+  DISCONNECT: 50,
+} as const;
+
+/**
+ * Exchange segment byte → string mapping (from Dhan Annexure).
+ * Used when converting binary response header back to human-readable segment.
+ */
+const EXCHANGE_SEGMENT_MAP: Record<number, string> = {
+  0: 'IDX_I',
+  1: 'NSE_EQ',
+  2: 'NSE_FNO',
+  3: 'NSE_CURRENCY',
+  4: 'BSE_EQ',
+  5: 'MCX_COMM',
+  7: 'BSE_CURRENCY',
+  8: 'BSE_FNO',
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DhanWebSocketClient
@@ -275,11 +314,16 @@ export class DhanWebSocketClient implements OnModuleDestroy {
   /**
    * Create a new WebSocket instance and attach event handlers.
    *
+   * Dhan v2 authenticates via query parameters on the WebSocket URL — NOT via
+   * HTTP headers.  The URL format is:
+   *   wss://api-feed.dhan.co?version=2&token=TOKEN&clientId=CLIENT_ID&authType=2
+   *
    * The Dhan session token is fetched fresh from SecretsService on every call
    * (never stored locally — Requirement 3.3).
    */
   private async attemptConnection(): Promise<void> {
-    const wsUrl = this.config.get<string>('DHAN_WS_URL', 'wss://api-feed.dhan.co');
+    const wsBaseUrl = this.config.get<string>('DHAN_WS_URL', 'wss://api-feed.dhan.co');
+    const clientId = this.config.get<string>('DHAN_CLIENT_ID', '');
 
     // Fetch token on every connection attempt — never cached (Requirement 3.3)
     let token: string;
@@ -293,10 +337,21 @@ export class DhanWebSocketClient implements OnModuleDestroy {
       return;
     }
 
+    // Dhan v2 requires auth as query params, NOT as HTTP headers.
+    // Adding headers causes HTTP 400 — the server ignores them.
+    const wsUrl =
+      `${wsBaseUrl}?version=2` +
+      `&token=${encodeURIComponent(token)}` +
+      `&clientId=${encodeURIComponent(clientId)}` +
+      `&authType=2`;
+
+    this.logger.log(
+      `Connecting to Dhan feed: ${wsBaseUrl}?version=2&clientId=${clientId}&authType=2&token=***`,
+    );
+
     try {
-      this.ws = new WebSocket(wsUrl, {
-        headers: { 'access-token': token },
-      });
+      // No headers needed — auth is embedded in the URL above
+      this.ws = new WebSocket(wsUrl);
 
       this.ws.on('open', () => this.onOpen());
       this.ws.on('message', (data) => this.onMessage(data as Buffer));
@@ -344,10 +399,33 @@ export class DhanWebSocketClient implements OnModuleDestroy {
   }
 
   /**
-   * Handle an incoming WebSocket message.
+   * Handle an incoming WebSocket message from Dhan Market Feed v2.
+   *
+   * Dhan sends ALL responses as **little-endian binary packets**, never JSON.
+   * The binary layout (0-indexed bytes):
+   *
+   *   Header (8 bytes):
+   *     [0]      uint8  — Feed Response Code (see FEED_RESPONSE_CODE)
+   *     [1-2]    int16  — Total message length in bytes
+   *     [3]      uint8  — Exchange Segment (see EXCHANGE_SEGMENT_MAP)
+   *     [4-7]    int32  — Security ID
+   *
+   *   Payload varies by response code:
+   *     2  Ticker   : [8-11] float32 LTP,  [12-15] int32 LTT(epoch)
+   *     4  Quote    : [8-11] float32 LTP,  [12-13] int16 LTQ,
+   *                   [14-17] int32 LTT,   [18-21] float32 ATP,
+   *                   [22-25] int32 Volume,[26-29] int32 TSQ,[30-33] int32 TBQ,
+   *                   [34-37] float32 Open,[38-41] float32 Close,
+   *                   [42-45] float32 High,[46-49] float32 Low
+   *     5  OI       : [8-11] int32 openInterest
+   *     6  PrevClose: [8-11] float32 prevClose, [12-15] int32 prevOI
+   *     8  Full     : Quote fields + OI + depth (163 bytes total)
+   *     50 Disconnect: [8-9] int16 disconnection code
+   *
+   * All multi-byte values are **Little Endian** (Dhan v2 spec).
    *
    * Cancels the first-tick SLA timer on the first message received.
-   * Emits `market.tick.received` with the parsed tick payload.
+   * Emits `market.tick.received` with the parsed DhanTickData payload.
    *
    * Requirement 3.4 — first-tick SLA tracking.
    */
@@ -359,11 +437,155 @@ export class DhanWebSocketClient implements OnModuleDestroy {
     }
 
     try {
-      const rawStr = data.toString('utf8');
-      const tick = JSON.parse(rawStr) as DhanTickData;
-      this.eventEmitter.emit('market.tick.received', tick);
+      const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
+
+      // Need at least 8 bytes to read the header
+      if (buf.length < 8) {
+        this.logger.warn(`Received undersized packet (${buf.length} bytes) — skipping`);
+        return;
+      }
+
+      const responseCode = buf.readUInt8(0);
+      // bytes 1-2: message length (unused for routing, but useful for debug)
+      const exchangeSegmentByte = buf.readUInt8(3);
+      const securityId = buf.readInt32LE(4);
+      const exchangeSegment =
+        EXCHANGE_SEGMENT_MAP[exchangeSegmentByte] ?? `UNKNOWN_${exchangeSegmentByte}`;
+
+      // ── Disconnect packet ──────────────────────────────────────────────────
+      if (responseCode === FEED_RESPONSE_CODE.DISCONNECT) {
+        const disconnectCode = buf.length >= 10 ? buf.readInt16LE(8) : -1;
+        this.logger.warn(`Dhan feed sent disconnect packet, code=${disconnectCode}`);
+        return;
+      }
+
+      // ── Ticker packet (code 2) ─────────────────────────────────────────────
+      if (responseCode === FEED_RESPONSE_CODE.TICKER) {
+        if (buf.length < 16) return;
+        const tick: DhanTickData = {
+          securityId,
+          exchangeSegment,
+          lastTradedPrice: buf.readFloatLE(8),
+          timestamp: buf.readInt32LE(12),
+        };
+        this.eventEmitter.emit('market.tick.received', tick);
+        return;
+      }
+
+      // ── Quote packet (code 4) ──────────────────────────────────────────────
+      if (responseCode === FEED_RESPONSE_CODE.QUOTE) {
+        if (buf.length < 50) return;
+        const tick: DhanTickData = {
+          securityId,
+          exchangeSegment,
+          lastTradedPrice: buf.readFloatLE(8),
+          lastTradedQuantity: buf.readInt16LE(12),
+          timestamp: buf.readInt32LE(14),
+          avgTradePrice: buf.readFloatLE(18),
+          volume: buf.readInt32LE(22),
+          totalSellQty: buf.readInt32LE(26),
+          totalBuyQty: buf.readInt32LE(30),
+          open: buf.readFloatLE(34),
+          close: buf.readFloatLE(38),
+          high: buf.readFloatLE(42),
+          low: buf.readFloatLE(46),
+        };
+        this.eventEmitter.emit('market.tick.received', tick);
+        return;
+      }
+
+      // ── OI packet (code 5) ─────────────────────────────────────────────────
+      if (responseCode === FEED_RESPONSE_CODE.OI) {
+        if (buf.length < 12) return;
+        const tick: DhanTickData = {
+          securityId,
+          exchangeSegment,
+          openInterest: buf.readInt32LE(8),
+        };
+        this.eventEmitter.emit('market.tick.received', tick);
+        return;
+      }
+
+      // ── Prev-Close packet (code 6) ─────────────────────────────────────────
+      if (responseCode === FEED_RESPONSE_CODE.PREV_CLOSE) {
+        if (buf.length < 16) return;
+        const tick: DhanTickData = {
+          securityId,
+          exchangeSegment,
+          prevClose: buf.readFloatLE(8),
+          prevOI: buf.readInt32LE(12),
+        };
+        this.eventEmitter.emit('market.tick.received', tick);
+        return;
+      }
+
+      // ── Full packet (code 8) — primary packet for trading ─────────────────
+      if (responseCode === FEED_RESPONSE_CODE.FULL) {
+        if (buf.length < 62) return;
+        const tick: DhanTickData = {
+          securityId,
+          exchangeSegment,
+          lastTradedPrice: buf.readFloatLE(8),
+          lastTradedQuantity: buf.readInt16LE(12),
+          timestamp: buf.readInt32LE(14),
+          avgTradePrice: buf.readFloatLE(18),
+          volume: buf.readInt32LE(22),
+          totalSellQty: buf.readInt32LE(26),
+          totalBuyQty: buf.readInt32LE(30),
+          openInterest: buf.readInt32LE(34),
+          highestOI: buf.readInt32LE(38),
+          lowestOI: buf.readInt32LE(42),
+          open: buf.readFloatLE(46),
+          close: buf.readFloatLE(50),
+          high: buf.readFloatLE(54),
+          low: buf.readFloatLE(58),
+        };
+
+        // Market depth: 5 levels × 20 bytes starting at byte 62
+        if (buf.length >= 162) {
+          const depth: Array<{
+            bidQty: number;
+            askQty: number;
+            bidOrders: number;
+            askOrders: number;
+            bidPrice: number;
+            askPrice: number;
+          }> = [];
+          for (let i = 0; i < 5; i++) {
+            const offset = 62 + i * 20;
+            depth.push({
+              bidQty: buf.readInt32LE(offset),
+              askQty: buf.readInt32LE(offset + 4),
+              bidOrders: buf.readInt16LE(offset + 8),
+              askOrders: buf.readInt16LE(offset + 10),
+              bidPrice: buf.readFloatLE(offset + 12),
+              askPrice: buf.readFloatLE(offset + 16),
+            });
+          }
+          tick.depth = depth;
+        }
+
+        this.eventEmitter.emit('market.tick.received', tick);
+        return;
+      }
+
+      // ── Index packet (code 1) ──────────────────────────────────────────────
+      if (responseCode === FEED_RESPONSE_CODE.INDEX) {
+        if (buf.length < 16) return;
+        const tick: DhanTickData = {
+          securityId,
+          exchangeSegment,
+          lastTradedPrice: buf.readFloatLE(8),
+          timestamp: buf.readInt32LE(12),
+        };
+        this.eventEmitter.emit('market.tick.received', tick);
+        return;
+      }
+
+      // Unknown response code — log and discard
+      this.logger.debug(`Unknown feed response code ${responseCode} for securityId=${securityId}`);
     } catch (err) {
-      this.logger.error(`Failed to parse tick message: ${(err as Error).message}`);
+      this.logger.error(`Failed to parse binary tick packet: ${(err as Error).message}`);
     }
   }
 

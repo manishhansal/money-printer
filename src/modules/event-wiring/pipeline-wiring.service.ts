@@ -26,13 +26,17 @@
  */
 
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { OnEvent } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 
 import { SignalScoringService } from '../signal-scoring/signal-scoring.service';
 import { DailyLossStateMachineService } from '../risk-management/daily-loss-state-machine.service';
 import { SIGNAL_CANDIDATE_EVENT, SignalCandidateEventPayload } from '../strategy/strategy.types';
 import { UNREALIZED_PNL_UPDATED_EVENT } from '../position-monitoring/position-monitoring.types';
 import { SignalInput } from '../signal-scoring/signal-scoring.types';
+import {
+  SIGNAL_ACCEPTED_EVENT,
+  SignalAcceptedEventPayload,
+} from '../signal-scanner/signal-scanner.types';
 
 /** Payload shape for the UNREALIZED_PNL_UPDATED_EVENT. */
 export interface UnrealizedPnlPayload {
@@ -46,6 +50,7 @@ export class PipelineWiringService implements OnModuleInit {
   constructor(
     private readonly signalScoringService: SignalScoringService,
     private readonly dailyLossStateMachineService: DailyLossStateMachineService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
@@ -119,6 +124,39 @@ export class PipelineWiringService implements OnModuleInit {
           `status=${result.status}` +
           (result.rejectionReason ? `, reason=${result.rejectionReason}` : ''),
       );
+
+      // ── Dispatch accepted signals to execution engine ──────────────────────
+      // Emit SIGNAL_ACCEPTED_EVENT so SignalDispatcherService can route the
+      // trade to PaperTradingService (PAPER) or ExecutionService (LIVE).
+      if (result.approved && result.status === 'active') {
+        // Extract securityId from measuredInputs if the scanner stored it there.
+        // Falls back to empty string if unavailable (live-sourced signals may
+        // not have this; dispatcher handles gracefully).
+        const securityId =
+          typeof payload.measuredInputs?.['securityId'] === 'string'
+            ? (payload.measuredInputs['securityId'] as string)
+            : '';
+
+        const dispatchPayload: SignalAcceptedEventPayload = {
+          signalId: result.signalId,
+          strategyId: payload.strategyId,
+          instrumentId: payload.instrumentId,
+          securityId,
+          engine: payload.engine,
+          direction: payload.direction,
+          entryPrice: payload.entryPrice,
+          stopLossPrice: payload.stopLossPrice,
+          targetPrice: payload.targetPrice,
+          positionSize: payload.positionSize,
+          compositeScore: result.compositeScore,
+          regime: payload.regime ?? null,
+        };
+        this.eventEmitter.emit(SIGNAL_ACCEPTED_EVENT, dispatchPayload);
+        this.logger.log(
+          `[${SIGNAL_CANDIDATE_EVENT}] Emitted ${SIGNAL_ACCEPTED_EVENT} for ` +
+            `signalId=${result.signalId} engine=${payload.engine}`,
+        );
+      }
     } catch (err) {
       // Never propagate — log and continue so other listeners are not affected.
       this.logger.error(

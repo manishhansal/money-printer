@@ -31,6 +31,7 @@ import { PaperTradingModule } from './modules/paper-trading/paper-trading.module
 import { ReconciliationModule } from './modules/reconciliation/reconciliation.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { ComplianceModule } from './modules/compliance/compliance.module';
+import { SignalScannerModule } from './modules/signal-scanner/signal-scanner.module';
 
 /**
  * Root application module.
@@ -166,6 +167,10 @@ import { ComplianceModule } from './modules/compliance/compliance.module';
     AnalyticsModule,
     // Compliance — 4 profitability gates, Monte Carlo ≥95%.
     ComplianceModule,
+    // Signal Scanner — cron-based scanner that evaluates live market snapshots
+    // and routes accepted signals (score ≥ 80) to paper/live execution.
+    // Closes the missing pipeline link: market data → signals → trades.
+    SignalScannerModule,
 
     // Redis channel wiring — bridges events:regime_change and events:session_phase
     // pub/sub channels to in-process service handlers; also ensures
@@ -215,6 +220,9 @@ export class AppModule implements NestModule {
         { path: 'settings', method: RequestMethod.GET },
         { path: 'settings', method: RequestMethod.PUT },
         { path: 'portfolio/summary', method: RequestMethod.GET },
+        { path: 'paper-trading/positions', method: RequestMethod.GET },
+        { path: 'paper-trading/balance', method: RequestMethod.GET },
+        { path: 'signals/ranked', method: RequestMethod.GET },
       )
       .forRoutes('*');
   }

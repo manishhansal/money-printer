@@ -24,8 +24,10 @@ import { PaperOrder } from '../../database/entities/paper-orders.entity';
 import { PaperExecution } from '../../database/entities/paper-executions.entity';
 import { PaperPosition } from '../../database/entities/paper-positions.entity';
 import { PaperTrade } from '../../database/entities/paper-trades.entity';
+import { UserSettings } from '../../database/entities/user-settings.entity';
 
 import { RedisService } from '../redis/redis.service';
+import { TradingChargesService } from '../charges/trading-charges.service';
 
 import { PaperTradingService, PAPER_STARTING_CAPITAL } from './paper-trading.service';
 
@@ -77,6 +79,12 @@ function buildMockPaperTradesRepo() {
   return {
     create: jest.fn((dto) => ({ ...dto, id: nextUuid() })),
     save: jest.fn(async (entity) => ({ ...entity, id: entity.id ?? nextUuid() })),
+  };
+}
+
+function buildMockUserSettingsRepo() {
+  return {
+    findOne: jest.fn(async () => null), // no settings row → falls back to PAPER_STARTING_CAPITAL
   };
 }
 
@@ -149,6 +157,7 @@ describe('PaperTradingService', () => {
   let mockPaperExecutionsRepo: ReturnType<typeof buildMockPaperExecutionsRepo>;
   let mockPaperPositionsRepo: ReturnType<typeof buildMockPaperPositionsRepo>;
   let mockPaperTradesRepo: ReturnType<typeof buildMockPaperTradesRepo>;
+  let mockUserSettingsRepo: ReturnType<typeof buildMockUserSettingsRepo>;
   let mockRedis: ReturnType<typeof buildMockRedisService>;
 
   beforeEach(async () => {
@@ -159,6 +168,7 @@ describe('PaperTradingService', () => {
     mockPaperExecutionsRepo = buildMockPaperExecutionsRepo();
     mockPaperPositionsRepo = buildMockPaperPositionsRepo();
     mockPaperTradesRepo = buildMockPaperTradesRepo();
+    mockUserSettingsRepo = buildMockUserSettingsRepo();
     mockRedis = buildMockRedisService();
 
     // Default: no existing open position
@@ -167,10 +177,14 @@ describe('PaperTradingService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PaperTradingService,
+        // TradingChargesService is a pure calculation service with no injected
+        // dependencies — use the real class so cost assertions match production.
+        TradingChargesService,
         { provide: getRepositoryToken(PaperOrder), useValue: mockPaperOrdersRepo },
         { provide: getRepositoryToken(PaperExecution), useValue: mockPaperExecutionsRepo },
         { provide: getRepositoryToken(PaperPosition), useValue: mockPaperPositionsRepo },
         { provide: getRepositoryToken(PaperTrade), useValue: mockPaperTradesRepo },
+        { provide: getRepositoryToken(UserSettings), useValue: mockUserSettingsRepo },
         { provide: RedisService, useValue: mockRedis },
       ],
     }).compile();
@@ -626,6 +640,18 @@ describe('PaperTradingService', () => {
     });
 
     it('rejects the order when bid price is null for a SELL order', async () => {
+      // Need an open LONG position so the options-buying guard passes,
+      // then the missing bid price triggers "market data unavailable".
+      mockPaperPositionsRepo.findOne.mockResolvedValueOnce({
+        id: 'pos-null-bid-001',
+        engine: 'PAPER',
+        instrument_id: 'instr-test-001',
+        direction: 'LONG',
+        quantity: 50,
+        average_entry_price: '100.00',
+        is_open: true,
+      });
+
       // askPrice present but bidPrice is null — SELL needs bid
       (mockRedis.get as jest.Mock)
         .mockResolvedValueOnce(null)
@@ -1082,6 +1108,18 @@ describe('PaperTradingService', () => {
     });
 
     it('SELL order with bidPrice=null → rejected with "market data unavailable" even when askPrice and LTP are present', async () => {
+      // Need an open LONG position so the options-buying guard passes,
+      // then the missing bid price triggers "market data unavailable".
+      mockPaperPositionsRepo.findOne.mockResolvedValueOnce({
+        id: 'pos-null-bid-002',
+        engine: 'PAPER',
+        instrument_id: 'instr-test-001',
+        direction: 'LONG',
+        quantity: 50,
+        average_entry_price: '100.00',
+        is_open: true,
+      });
+
       (mockRedis.get as jest.Mock)
         .mockResolvedValueOnce(null) // idempotency miss
         .mockResolvedValueOnce(snapshotNullBid());
@@ -1560,7 +1598,7 @@ describe('PaperTradingService', () => {
   //
   // The PaperEngine must apply the identical cost model as the LiveEngine:
   //   Brokerage:        ₹20 flat per executed order side  (₹40 round-trip)
-  //   STT:              0.05%  of sell-side turnover
+  //   STT:              0.1%   of sell-side turnover  (Budget 2024, eff. Oct 2024)
   //   Exchange charges: 0.053% of total (buy + sell) turnover
   //   GST:              18%    of (brokerage + exchange charges)
   //   SEBI charges:     ₹10/crore of total turnover (0.000001 × turnover)
@@ -1573,15 +1611,15 @@ describe('PaperTradingService', () => {
   //   totalTurnover =             ₹ 10,100
   //
   //   brokerage        = ₹ 40.0000  (₹20 × 2)
-  //   stt              = ₹  2.5500  (0.05%  × 5100)
+  //   stt              = ₹  5.1000  (0.1%   × 5100)
   //   exchange_charges = ₹  5.3530  (0.053% × 10100)
   //   gst              = ₹  8.1635  (18%    × (40 + 5.353))
   //   sebi_charges     = ₹  0.0101  (10/crore × 10100)
   //   stamp_duty       = ₹  0.1500  (0.003% × 5000)
   //   ─────────────────────────────
-  //   total costs      = ₹ 56.2266
+  //   total costs      = ₹ 58.7766
   //   gross P&L        = ₹100.00  ((102−100) × 50)
-  //   net   P&L        = ₹ 43.77  (100 − 56.2266, rounded to 2 dp)
+  //   net   P&L        = ₹ 41.22  (100 − 58.7766, rounded to 2 dp)
   // ─────────────────────────────────────────────────────────────────────────
 
   describe('Trading cost formulas — NSE F&O (Requirement 10.6)', () => {
@@ -1595,7 +1633,7 @@ describe('PaperTradingService', () => {
     const TOTAL_TURNOVER = BUY_TURNOVER + SELL_TURNOVER; // 10 100
 
     const EXP_BROKERAGE = 40; // ₹40 flat
-    const EXP_STT = SELL_TURNOVER * 0.0005; // 2.55
+    const EXP_STT = SELL_TURNOVER * 0.001; // 5.10 (Budget 2024: 0.1% on sell premium)
     const EXP_EXCHANGE_CHARGES = TOTAL_TURNOVER * 0.00053; // 5.353
     const EXP_GST = (EXP_BROKERAGE + EXP_EXCHANGE_CHARGES) * 0.18; // 8.1635…
     const EXP_SEBI = TOTAL_TURNOVER * 0.000001; // 0.0101
@@ -1649,7 +1687,7 @@ describe('PaperTradingService', () => {
       expect(parseFloat(args.brokerage)).toBeCloseTo(EXP_BROKERAGE, 4);
     });
 
-    it('STT stored in PaperTrade equals 0.05% of sell-side turnover only', async () => {
+    it('STT stored in PaperTrade equals 0.1% of sell-side turnover only (Budget 2024, eff. Oct 2024)', async () => {
       setupTradeCloseMocks(ENTRY_PRICE, EXIT_PRICE, QTY);
 
       await service.submitPaperOrder(
@@ -1716,7 +1754,7 @@ describe('PaperTradingService', () => {
       const args = mockPaperTradesRepo.create.mock.calls[0][0] as Record<string, string>;
 
       expect(parseFloat(args.brokerage)).toBeCloseTo(40.0, 4); // ₹40.0000
-      expect(parseFloat(args.stt)).toBeCloseTo(2.55, 4); // ₹2.5500
+      expect(parseFloat(args.stt)).toBeCloseTo(5.1, 4); // ₹5.1000  (0.1% × 5100, Budget 2024)
       expect(parseFloat(args.exchange_charges)).toBeCloseTo(5.353, 4); // ₹5.3530
       expect(parseFloat(args.gst)).toBeCloseTo(8.1635, 4); // ₹8.1635
       expect(parseFloat(args.sebi_charges)).toBeCloseTo(0.0101, 4); // ₹0.0101
