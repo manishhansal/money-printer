@@ -111,6 +111,14 @@ export class SubscriptionRotationService implements OnModuleInit {
         `lower=${this.lowerThresholdPct}%, ` +
         `minScore=${this.minLiquidityScore}`,
     );
+
+    // Establish the Dhan WebSocket connection for the live market feed.
+    // The client uses exponential backoff reconnection automatically.
+    void this.dhanWebSocketClient.connect().catch((err) => {
+      this.logger.error(
+        `SubscriptionRotation: failed to initiate WebSocket connection: ${(err as Error).message}`,
+      );
+    });
   }
 
   // -------------------------------------------------------------------------
