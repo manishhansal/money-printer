@@ -30,6 +30,7 @@ import { MarketRegimeService } from '../market-regime/market-regime.service';
 import { SessionManagerService } from '../session-manager/session-manager.service';
 import { StrategyService } from '../strategy/strategy.service';
 import { SniperEntryService } from './sniper-entry.service';
+import { LiveTradingService } from '../live-trading/live-trading.service';
 import { MarketRegime } from '../market-regime/market-regime.types';
 import { SessionPhase } from '../session-manager/session-manager.types';
 import { SignalCandidateInput } from '../strategy/strategy.types';
@@ -84,6 +85,7 @@ export class SignalScannerService {
     private readonly sessionManagerService: SessionManagerService,
     private readonly strategyService: StrategyService,
     private readonly sniperEntryService: SniperEntryService,
+    private readonly liveTradingService: LiveTradingService,
     @InjectRepository(Instruments)
     private readonly instrumentsRepo: Repository<Instruments>,
   ) {}
@@ -309,9 +311,11 @@ export class SignalScannerService {
     isOpeningPhase: boolean,
   ): SignalCandidateInput {
     const ltp = snapshot.ltp;
-    // Direction: BUY for bullish/neutral regime, SELL for bearish.
-    // Paper engine is options-buying only — always use BUY to prevent
-    // the paper engine's short-selling guard from rejecting the order.
+    // Direction: options buying always uses BUY transaction type regardless of
+    // market direction.  CE vs PE selection (which encodes the directional bet)
+    // happens downstream in ContractSelectionService.  Using BUY here prevents
+    // the paper engine's short-selling guard from incorrectly rejecting options
+    // entries in a bearish regime.
     const direction = 'BUY';
 
     const slDist = ltp * SL_PCT;
@@ -325,6 +329,18 @@ export class SignalScannerService {
 
     const componentScores = this.computeComponentScores(snapshot, regime, rrRatio);
 
+    // ── Engine selection: LIVE when armed, PAPER otherwise ──────────────────
+    // Fix for DEFECT-001: previously this was hardcoded to 'PAPER', making the
+    // live trading pipeline unreachable from the automatic scanner cron even
+    // when the engine was ARMED.  Now reads the actual armed state so that
+    // signals generated during an active live session route to the live
+    // execution path.
+    //
+    // The dispatcher (SignalDispatcherService.dispatchToLive) performs a
+    // redundant isArmed() check as belt-and-suspenders, so it is safe for the
+    // scanner to set engine='LIVE' here without bypassing any safety gate.
+    const engine: 'LIVE' | 'PAPER' = this.liveTradingService.isArmed() ? 'LIVE' : 'PAPER';
+
     const measuredInputs: Record<string, unknown> = {
       ltp,
       bidPrice: snapshot.bidPrice,
@@ -336,11 +352,12 @@ export class SignalScannerService {
       slPct: SL_PCT,
       targetPct: TARGET_PCT,
       scannerVersion: '1.0',
+      engineMode: engine,
     };
 
     return {
       instrumentId,
-      engine: 'PAPER',
+      engine,
       direction: direction as 'BUY' | 'SELL',
       currentRegime: regime,
       isOpeningPhase,
