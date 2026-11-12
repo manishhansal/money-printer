@@ -3,27 +3,18 @@
  *
  * NestJS module for NSE trading session phase management.
  *
- * Provides:
- *  - SessionManagerService — phase detection, Redis updates, event publishing
+ * Providers:
+ *  - SessionManagerService      — phase detection, Redis updates, event publishing
+ *  - NseHolidayCalendarService  — NSE holiday calendar for FY2025-2026
  *
- * Exports SessionManagerService so other CloudEngine modules can call:
- *  - sessionManagerService.getCurrentPhase()           — current phase (sync)
- *  - sessionManagerService.isOpeningVolatilityPhase()  — OPENING_VOLATILITY check (sync)
- *  - sessionManagerService.isWithinMarketHours()       — market-hours check (sync)
- *  - sessionManagerService.determinePhase(date)        — phase for arbitrary timestamp
- *
- * Dependencies:
- *  - RedisModule (global) — command and pub/sub clients via RedisService
- *  - ScheduleModule       — must be imported in AppModule or this module
- *  - EventEmitterModule   — must be imported in AppModule
- *
- * Requirements: 17.1, 17.2, 17.5
+ * Requirements: 17.1, 17.2, 17.5, Phase 10 (NSE holiday calendar)
  */
 
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { SessionManagerService } from './session-manager.service';
+import { NseHolidayCalendarService } from './nse-holiday-calendar.service';
 
 @Module({
   imports: [
@@ -32,7 +23,7 @@ import { SessionManagerService } from './session-manager.service';
     // EventEmitterModule enables intra-process NestJS event broadcasting.
     EventEmitterModule.forRoot(),
   ],
-  providers: [SessionManagerService],
-  exports: [SessionManagerService],
+  providers: [SessionManagerService, NseHolidayCalendarService],
+  exports: [SessionManagerService, NseHolidayCalendarService],
 })
 export class SessionManagerModule {}

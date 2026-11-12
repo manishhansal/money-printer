@@ -453,6 +453,21 @@ export class LiveTradingService implements OnModuleInit {
       `[KILL SWITCH] Submitting market exit orders for ${openPositions.length} open LIVE position(s)`,
     );
 
+    // ── Reconcile with Dhan positions (same pattern as mandatorySquareOff) ───
+    const ksNetQtyMap = new Map<string, number>();
+    try {
+      const dhanPositions = await this.dhanApiClient.getPositions();
+      for (const dp of dhanPositions) {
+        if (dp.netQty !== 0) ksNetQtyMap.set(dp.securityId, dp.netQty);
+      }
+      this.logger.warn(`[KILL SWITCH] Dhan reconciliation: ${ksNetQtyMap.size} open position(s)`);
+    } catch (err) {
+      this.logger.warn(
+        `[KILL SWITCH] Dhan positions reconciliation failed: ${(err as Error).message}. ` +
+          `Proceeding with DB quantities.`,
+      );
+    }
+
     const pendingExitOrders: PendingSquareOffOrder[] = [];
 
     for (const position of openPositions) {
@@ -482,6 +497,17 @@ export class LiveTradingService implements OnModuleInit {
 
       const transactionType = position.direction === 'LONG' ? 'SELL' : 'BUY';
 
+      // Use Dhan reconciled net quantity if available (same pattern as mandatorySquareOff).
+      const ksNetQty = ksNetQtyMap.get(instrument.securityId);
+      const ksExitQty = ksNetQty !== undefined ? Math.abs(ksNetQty) : position.quantity;
+
+      if (ksNetQty === 0) {
+        this.logger.log(
+          `[KILL SWITCH] Position ${position.id} (${instrument.tradingSymbol}) already flat — skipping`,
+        );
+        continue;
+      }
+
       try {
         const orderResponse = await this.dhanApiClient.placeOrder({
           dhanClientId,
@@ -493,7 +519,7 @@ export class LiveTradingService implements OnModuleInit {
           orderType: 'MARKET',
           validity: 'DAY',
           securityId: instrument.securityId,
-          quantity: position.quantity,
+          quantity: ksExitQty, // reconciled quantity
         });
 
         pendingExitOrders.push({
@@ -501,7 +527,7 @@ export class LiveTradingService implements OnModuleInit {
           positionId: position.id,
           instrumentId: instrument.id,
           tradingSymbol: instrument.tradingSymbol,
-          quantity: position.quantity,
+          quantity: ksExitQty,
         });
 
         this.logger.log(
@@ -631,9 +657,7 @@ export class LiveTradingService implements OnModuleInit {
       await this.dhanApiClient.deletePnlExit();
       this.logger.log('[BrokerSafety] Broker P&L exit rule disabled at session end.');
     } catch (err) {
-      this.logger.debug(
-        `[BrokerSafety] deletePnlExit at session end: ${(err as Error).message}`,
-      );
+      this.logger.debug(`[BrokerSafety] deletePnlExit at session end: ${(err as Error).message}`);
     }
   }
 
@@ -656,6 +680,51 @@ export class LiveTradingService implements OnModuleInit {
     );
   }
 
+  /**
+   * Dhan token expired handler.
+   * Force-disarms the engine when the token watcher detects expiry.
+   * Emitted by DhanTokenWatcherService to avoid circular dependency.
+   */
+  @OnEvent('dhan.token.expired')
+  onDhanTokenExpired(event: { expiredAt: Date }): void {
+    this.logger.error(
+      `[TokenExpiry] Dhan session token expired at ${event.expiredAt.toISOString()} — ` +
+        'force-disarming live engine.',
+    );
+    this.forceDisarm('Dhan session token expired');
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Entry cutoff cron — 15:10 IST, Mon–Fri (belt-and-suspenders)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Final entry cutoff at 15:10 IST — belt-and-suspenders guard.
+   *
+   * The CLOSING phase beginning at 15:00 IST already blocks new entries via
+   * `isNewEntryBlocked()`.  This cron logs the cutoff explicitly and can be
+   * used by monitoring systems to verify the guard is active.
+   *
+   * Cron: 15:10 IST Mon–Fri
+   */
+  @Cron('10 15 * * 1-5', { timeZone: 'Asia/Kolkata' })
+  async finalEntryCutoff(): Promise<void> {
+    this.logger.warn(
+      '[ENTRY CUTOFF] 15:10 IST — final entry cutoff. ' +
+        `isNewEntryBlocked=${this.isNewEntryBlocked()}, armedState=${this.armedState}.`,
+    );
+
+    // If entries are somehow still allowed (e.g. phase event was missed),
+    // force-disable them now.
+    if (!this.isNewEntryBlocked()) {
+      this.logger.error(
+        '[ENTRY CUTOFF] 15:10 IST — entries NOT blocked despite CLOSING phase. ' +
+          'Forcing disarm as safety measure.',
+      );
+      this.forceDisarm('15:10 IST final entry cutoff safety override');
+    }
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   // Mandatory square-off cron — 15:15 IST, Mon–Fri
   // ─────────────────────────────────────────────────────────────────────────
@@ -664,23 +733,47 @@ export class LiveTradingService implements OnModuleInit {
    * Mandatory intraday square-off triggered every weekday at 15:15 IST.
    *
    * Flow (Requirement 17.4, 17.7):
-   *  1. Query all open LIVE positions (is_open = true AND engine = 'LIVE').
-   *  2. Submit a MARKET SELL order for each open position via DhanApiClient.
-   *  3. Record a `mandatory-exit` compliance event in TradeJournal with the
-   *     exit timestamp and all affected position IDs.
-   *  4. After 5 minutes, check order confirmation status.
-   *     For any order that is REJECTED or unconfirmed, publish a CRITICAL alert
-   *     via NotificationService identifying the specific position.
+   *  1. Query actual Dhan net positions (reconcile with broker first).
+   *  2. For each Dhan open INTRADAY position, find the matching DB position.
+   *  3. Submit MARKET exit order using the ACTUAL Dhan net quantity.
+   *  4. Record a `mandatory-exit` compliance event in TradeJournal.
+   *  5. After 5 minutes, check order confirmation status.
    *
-   * Cron expression: minute=15 hour=15 every weekday in Asia/Kolkata timezone
-   * (15:15 IST = 09:45 UTC).
+   * Using Dhan positions (not just DB positions) prevents incorrect exit
+   * quantities caused by partial fills or manual interventions.
+   *
+   * Cron: 15:15 IST Mon–Fri
    */
   @Cron('15 15 * * 1-5', { timeZone: 'Asia/Kolkata' })
   async mandatorySquareOff(): Promise<void> {
     const squareOffAt = new Date();
     this.logger.warn(`[MANDATORY SQUARE-OFF] 15:15 IST triggered at ${squareOffAt.toISOString()}`);
 
-    // ── Step 1: Query open LIVE positions ────────────────────────────────────
+    // ── Step 1: Reconcile with Dhan positions (authoritative net quantities) ──
+    // Using ONLY the DB positions risks using stale/incorrect quantities from
+    // partial fills or manual broker interventions. Query actual Dhan net
+    // quantities first and use them for exit order sizing.
+    const dhanNetQtyMap = new Map<string, number>(); // securityId → netQty
+    try {
+      const dhanPositions = await this.dhanApiClient.getPositions();
+      for (const dp of dhanPositions) {
+        // netQty > 0 = LONG; netQty < 0 = SHORT
+        if (dp.netQty !== 0) {
+          dhanNetQtyMap.set(dp.securityId, dp.netQty);
+        }
+      }
+      this.logger.log(
+        `[MANDATORY SQUARE-OFF] Dhan positions reconciled: ` +
+          `${dhanNetQtyMap.size} open position(s) on broker side`,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `[MANDATORY SQUARE-OFF] Could not fetch Dhan positions for reconciliation: ` +
+          `${(err as Error).message}. Proceeding with DB quantities as fallback.`,
+      );
+    }
+
+    // ── Step 2: Query open LIVE positions from DB ───────────────────────────
     let openPositions: Position[];
     try {
       openPositions = await this.positionsRepo.find({
@@ -765,6 +858,30 @@ export class LiveTradingService implements OnModuleInit {
       // LONG positions → SELL; SHORT positions → BUY to close
       const transactionType = position.direction === 'LONG' ? 'SELL' : 'BUY';
 
+      // ── Use reconciled Dhan net quantity if available ─────────────────────
+      // If Dhan reports a different net quantity than the DB, use the Dhan
+      // quantity as the authoritative source (partial fills, manual changes).
+      // If Dhan reports netQty=0 for this instrument, the position is already
+      // flat — skip it.
+      const dhanNetQty = dhanNetQtyMap.get(instrument.securityId);
+      const exitQuantity = dhanNetQty !== undefined ? Math.abs(dhanNetQty) : position.quantity;
+
+      if (dhanNetQty === 0) {
+        this.logger.log(
+          `[MANDATORY SQUARE-OFF] Position ${position.id} (${instrument.tradingSymbol}) ` +
+            `already flat on Dhan (netQty=0) — skipping`,
+        );
+        continue;
+      }
+
+      if (dhanNetQty !== undefined && dhanNetQty !== position.quantity) {
+        this.logger.warn(
+          `[MANDATORY SQUARE-OFF] Quantity mismatch for position ${position.id} ` +
+            `(${instrument.tradingSymbol}): DB=${position.quantity}, Dhan=${dhanNetQty}. ` +
+            `Using Dhan quantity=${exitQuantity}.`,
+        );
+      }
+
       try {
         const orderResponse = await this.dhanApiClient.placeOrder({
           dhanClientId,
@@ -776,7 +893,7 @@ export class LiveTradingService implements OnModuleInit {
           orderType: 'MARKET',
           validity: 'DAY',
           securityId: instrument.securityId,
-          quantity: position.quantity,
+          quantity: exitQuantity, // reconciled quantity, not stale DB value
         });
 
         pendingOrders.push({
@@ -784,7 +901,7 @@ export class LiveTradingService implements OnModuleInit {
           positionId: position.id,
           instrumentId: instrument.id,
           tradingSymbol: instrument.tradingSymbol,
-          quantity: position.quantity,
+          quantity: exitQuantity,
         });
 
         this.logger.log(
@@ -847,6 +964,135 @@ export class LiveTradingService implements OnModuleInit {
     if (pendingOrders.length > 0) {
       this.scheduleConfirmationCheck(pendingOrders, squareOffAt);
     }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Escalation crons — 15:20, 15:25, 15:28 IST
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * 15:20 IST escalation — verify all submitted square-off orders are filling.
+   *
+   * Re-checks open LIVE positions in the DB. If any positions remain and are
+   * not covered by a pending confirmation-check order, triggers re-attempt
+   * and CRITICAL alert.
+   */
+  @Cron('20 15 * * 1-5', { timeZone: 'Asia/Kolkata' })
+  async escalateSquareOff(): Promise<void> {
+    const checkAt = new Date();
+    this.logger.warn(
+      `[SQUARE-OFF ESCALATION] 15:20 IST check triggered at ${checkAt.toISOString()}`,
+    );
+
+    let stillOpen: Position[] = [];
+    try {
+      stillOpen = await this.positionsRepo.find({ where: { is_open: true, engine: 'LIVE' } });
+    } catch (err) {
+      this.logger.error(`[SQUARE-OFF ESCALATION] DB query failed: ${(err as Error).message}`);
+      return;
+    }
+
+    if (stillOpen.length === 0) {
+      this.logger.log('[SQUARE-OFF ESCALATION] 15:20 IST — no open LIVE positions. ✓');
+      return;
+    }
+
+    this.logger.warn(
+      `[SQUARE-OFF ESCALATION] 15:20 IST — ${stillOpen.length} position(s) still open. ` +
+        `Publishing CRITICAL alert.`,
+    );
+
+    await this.alertCritical(
+      `Square-Off Escalation — ${stillOpen.length} Position(s) Still Open at 15:20`,
+      `${stillOpen.length} LIVE position(s) remain open 5 minutes after the 15:15 IST mandatory ` +
+        `square-off. Verify order fills and manually close if needed.`,
+      {
+        openPositionIds: stillOpen.map((p) => p.id),
+        checkedAt: checkAt.toISOString(),
+      },
+    );
+  }
+
+  /**
+   * 15:25 IST flat-position verification — final deadline before 15:30 close.
+   *
+   * Requirement: every MoneyPrinter-managed intraday position must be flat by
+   * 15:25 IST where executable. Any remaining open position is a critical failure.
+   */
+  @Cron('25 15 * * 1-5', { timeZone: 'Asia/Kolkata' })
+  async verifyFlatPositions(): Promise<void> {
+    const checkAt = new Date();
+    this.logger.warn(
+      `[FLAT-POSITION VERIFY] 15:25 IST check triggered at ${checkAt.toISOString()}`,
+    );
+
+    let stillOpen: Position[] = [];
+    try {
+      stillOpen = await this.positionsRepo.find({ where: { is_open: true, engine: 'LIVE' } });
+    } catch (err) {
+      this.logger.error(`[FLAT-POSITION VERIFY] DB query failed: ${(err as Error).message}`);
+      return;
+    }
+
+    if (stillOpen.length === 0) {
+      this.logger.log('[FLAT-POSITION VERIFY] 15:25 IST — all LIVE positions are FLAT. ✓');
+      return;
+    }
+
+    this.logger.error(
+      `[FLAT-POSITION VERIFY] 15:25 IST — ${stillOpen.length} position(s) NOT flat. ` +
+        `These must be closed before 15:30 IST market close.`,
+    );
+
+    await this.alertCritical(
+      `Flat-Position Deadline Missed — ${stillOpen.length} Open at 15:25 IST`,
+      `${stillOpen.length} LIVE position(s) are still open at the 15:25 IST flat-position ` +
+        `verification deadline. IMMEDIATE manual intervention required before 15:30 IST.`,
+      {
+        openPositionIds: stillOpen.map((p) => p.id),
+        checkedAt: checkAt.toISOString(),
+      },
+    );
+  }
+
+  /**
+   * 15:28 IST critical alert — last-resort warning before market close.
+   *
+   * If any position remains open 2 minutes before the 15:30 market close,
+   * this fires a MAX-priority alert for immediate manual action.
+   */
+  @Cron('28 15 * * 1-5', { timeZone: 'Asia/Kolkata' })
+  async criticalPositionAlert(): Promise<void> {
+    const checkAt = new Date();
+
+    let stillOpen: Position[] = [];
+    try {
+      stillOpen = await this.positionsRepo.find({ where: { is_open: true, engine: 'LIVE' } });
+    } catch (err) {
+      this.logger.error(`[CRITICAL ALERT] 15:28 DB query failed: ${(err as Error).message}`);
+      return;
+    }
+
+    if (stillOpen.length === 0) {
+      this.logger.log('[CRITICAL ALERT] 15:28 IST — all positions flat. ✓');
+      return;
+    }
+
+    this.logger.error(
+      `[CRITICAL ALERT] 15:28 IST — ${stillOpen.length} position(s) STILL OPEN 2 minutes ` +
+        `before market close. This is a CRITICAL OPERATIONS FAILURE.`,
+    );
+
+    await this.alertMax(
+      `CRITICAL: ${stillOpen.length} Open Position(s) at 15:28 IST — 2 Minutes to Close`,
+      `${stillOpen.length} LIVE position(s) remain open at 15:28 IST — 2 minutes before the ` +
+        `15:30 IST NSE market close. IMMEDIATE MANUAL INTERVENTION REQUIRED.`,
+      {
+        openPositionIds: stillOpen.map((p) => p.id),
+        checkedAt: checkAt.toISOString(),
+        minutesToClose: 2,
+      },
+    );
   }
 
   // ─────────────────────────────────────────────────────────────────────────

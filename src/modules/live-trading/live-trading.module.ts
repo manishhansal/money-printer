@@ -38,6 +38,7 @@ import { TradeJournalModule } from '../trade-journal/trade-journal.module';
 import { NotificationModule } from '../notification/notification.module';
 
 import { LiveTradingService } from './live-trading.service';
+import { LiveTradingController } from './live-trading.controller';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { LiveTradingService } from './live-trading.service';
     ScheduleModule.forRoot(),
   ],
   providers: [LiveTradingService],
+  controllers: [LiveTradingController],
   exports: [LiveTradingService],
 })
 export class LiveTradingModule {}
