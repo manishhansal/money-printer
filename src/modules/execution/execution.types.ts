@@ -67,8 +67,24 @@ export interface OrderRequest {
   orderType: 'MARKET' | 'LIMIT' | 'SL' | 'SL-M';
   /** BUY or SELL. */
   transactionType: 'BUY' | 'SELL';
-  /** Lot/unit count. */
+  /**
+   * Quantity in UNITS (i.e. selectedLots × lotSize).
+   *
+   * This is the actual number of contract units to submit to the Dhan API.
+   * It is NOT the number of lots.  The caller MUST multiply selected lots by
+   * the instrument's exchange-defined lot size before constructing this field.
+   *
+   * Example: 2 lots of NIFTY (lot_size=75) → quantity = 150.
+   *
+   * Validation: quantityUnits % lotSize === 0 is enforced by ExecutionService.
+   */
   quantity: number;
+  /**
+   * Number of lots selected for this order (informational; used for display
+   * and analytics).  The authoritative execution quantity is `quantity` above.
+   * Optional for backward-compatibility with callers that only provide units.
+   */
+  selectedLots?: number;
   /** Limit price — required for LIMIT orders. */
   price?: number;
   /** Trigger price — required for SL / SL-M orders. */

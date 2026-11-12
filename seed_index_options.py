@@ -59,7 +59,19 @@ with open(CSV_FILE, encoding='utf-8', errors='replace') as f:
         opt_raw = row['SEM_OPTION_TYPE'].strip()
         option_type = 'CE' if opt_raw in ('CE', 'CA') else ('PE' if opt_raw in ('PE', 'PA') else None)
         lot_raw = row['SEM_LOT_UNITS'].strip()
-        lot_size = int(float(lot_raw)) if lot_raw else 1
+        # CRITICAL: reject instruments with no valid lot_size.
+        # Defaulting to 1 would cause quantity calculation bugs (P0-CRIT-003).
+        if not lot_raw:
+            print(f"  WARN: skipping {security_id} — missing SEM_LOT_UNITS")
+            continue
+        try:
+            lot_size = int(float(lot_raw))
+        except (ValueError, TypeError):
+            print(f"  WARN: skipping {security_id} — invalid SEM_LOT_UNITS: {lot_raw!r}")
+            continue
+        if lot_size <= 0:
+            print(f"  WARN: skipping {security_id} — lot_size={lot_size} is not positive")
+            continue
         tick_raw = row['SEM_TICK_SIZE'].strip()
         tick_size = float(tick_raw) if tick_raw else 0.05
 
@@ -101,7 +113,16 @@ for i in range(0, len(rows), batch_size):
         "expiry_date, strike_price, option_type, lot_size, tick_size, "
         "is_active, is_tradable, liquidity_score, created_at, updated_at) VALUES\n"
         + ',\n'.join(values) +
-        "\nON CONFLICT (security_id) DO UPDATE SET instrument_type = EXCLUDED.instrument_type, underlying = EXCLUDED.underlying;"
+        "\nON CONFLICT (security_id) DO UPDATE SET"
+        "\n  instrument_type = EXCLUDED.instrument_type,"
+        "\n  underlying      = EXCLUDED.underlying,"
+        "\n  trading_symbol  = EXCLUDED.trading_symbol,"
+        "\n  lot_size        = EXCLUDED.lot_size,"
+        "\n  tick_size       = EXCLUDED.tick_size,"
+        "\n  updated_at      = NOW()"
+        "\n  WHERE instruments.lot_size <> EXCLUDED.lot_size"
+        "\n     OR instruments.tick_size <> EXCLUDED.tick_size"
+        "\n     OR instruments.underlying <> EXCLUDED.underlying;"
     )
     result = subprocess.run(
         ['docker', 'exec', '-i', 'money-printer-postgres',
