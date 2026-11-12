@@ -123,3 +123,42 @@
 | SEBI algo registration | Operator responsibility |
 | Static IP configuration | Infrastructure concern |
 | Dhan token auto-renewal | Dhan has no programmatic renewal API for retail users |
+
+---
+
+## Session 4 — Forensic Remediation (2026-11-12)
+
+**Commit:** `c636d0dd544895ea2f8ad3b20958c4a2e38cefba`  
+**Tests before:** 1,535 (59 suites)  
+**Tests after:** 1,591 (62 suites)  
+**New tests:** +56 (3 new spec files + updated position-monitoring spec)
+
+### Defects Fixed
+
+| ID | File | Defect | Fix |
+|----|------|--------|-----|
+| DEFECT-001 (P0) | signal-scanner.service.ts | `engine: 'PAPER'` hardcoded in `buildCandidate()` — live trading pipeline unreachable | Injected `LiveTradingService`; `buildCandidate()` now returns `engine: this.liveTradingService.isArmed() ? 'LIVE' : 'PAPER'` |
+| DEFECT-004 (P2) | position-monitoring.service.ts | `processTick()` issued DB query on every tick for every instrument | Added in-memory `instrumentToPositions` fast-path guard; DB query only when map confirms tracked positions |
+
+### Tests Updated
+
+| File | Reason |
+|------|--------|
+| position-monitoring.service.spec.ts | Added `registerAndSetupFind()` helper; all tests now call `addPosition()` before `processTick()`, mirroring correct production lifecycle after DEFECT-004 fix |
+
+### New Spec Files Added
+
+| File | Tests | Coverage |
+|------|-------|---------|
+| `signal-scanner.service.spec.ts` | 22 | Engine selection (DEFECT-001 regression), phase guards, eligibility, component score calculations |
+| `signal-dispatcher.service.spec.ts` | 18 | Routing decisions, paper path guards, live path guards, lot conversion, payload validation |
+| `agent-orchestrator.service.spec.ts` | 16 | Workflow structure, rule-based fallback, LLM-unavailable/timeout safety, advisory-only invariant |
+
+### Remaining Open Issues
+
+| ID | Severity | Description |
+|----|----------|-------------|
+| DEFECT-002 | P1 | `entryConditionsMet` always true — requires implementing 8 strategy entry conditions |
+| DEFECT-003 | P1 | `momentum` and `vwapTrendAlignment` hardcoded to 8 — requires wiring `TechnicalAnalysisService` |
+| DEFECT-005 | P0-External | No historical NSE options data — cannot be fixed in code |
+| DEFECT-008 | P2 | No integration test suite |

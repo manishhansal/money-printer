@@ -80,3 +80,50 @@ There was no durable state prior to broker submission.
 **Status:** Deferred to Phase 4 (Square-off reliability) — requires careful coordination with the 15:15 mandatory square-off cron. Changing the CLOSING phase boundary affects multiple downstream components.
 
 **Planned fix:** Add separate `AFTERNOON_LATE` phase (14:30–15:00) that allows entries, and move `CLOSING` to start at 15:00 IST.
+
+---
+
+## RCA-006: engine:'PAPER' Hardcoded in Signal Scanner (DEFECT-001) — FIXED
+
+**Symptom:** Even with the system ARMED and all risk controls satisfied, no live orders could be generated from the automatic scanner cron. The `SignalDispatcherService.dispatchToLive()` path was unreachable.
+
+**Root cause chain:**
+1. `SignalScannerService.buildCandidate()` had a hardcoded literal: `engine: 'PAPER'`
+2. The comment explained it was for paper-mode compatibility, but it was not conditional on the actual armed state
+3. `SignalDispatcherService.onSignalAccepted()` routes based on `payload.engine`: when `'PAPER'` → `dispatchToPaper()`, when `'LIVE'` → `dispatchToLive()`
+4. Since `engine` was always `'PAPER'`, `dispatchToLive()` was never reached from the cron scanner
+5. `LiveTradingService` was available in `SignalScannerModule` (imported) but never injected into `SignalScannerService`
+
+**Fix implemented:**
+- Added `LiveTradingService` import and constructor injection to `SignalScannerService`
+- `buildCandidate()` now computes: `const engine: 'LIVE' | 'PAPER' = this.liveTradingService.isArmed() ? 'LIVE' : 'PAPER'`
+- Added `engineMode` to `measuredInputs` for observability in signal audit logs
+
+**Regression tests:** 4 engine-selection tests in `signal-scanner.service.spec.ts` verify ARMED→LIVE and DISARMED→PAPER behavior
+
+**Commit:** `c636d0dd544895ea2f8ad3b20958c4a2e38cefba`
+
+---
+
+## RCA-007: processTick() DB Query on Every Tick (DEFECT-004) — FIXED
+
+**Symptom:** Under a 100-instrument market feed, every incoming tick issued a `positionsRepo.find()` DB query regardless of whether any positions were tracked for that instrument. This created O(n) DB load per second, risking event-loop lag that could delay stop-loss processing.
+
+**Root cause chain:**
+1. `PositionMonitoringService` maintains two in-memory maps: `instrumentToPositions` and `positionToInstrument`
+2. These maps are populated by `onModuleInit()` and kept current by `addPosition()`/`removePosition()`
+3. `processTick()` ignored these maps and always called `positionsRepo.find()` first
+4. When no positions existed for an instrument, the query returned `[]` and the method returned immediately — but the DB round-trip had already occurred
+
+**Fix implemented:**
+- Added fast-path guard at the top of `processTick()`:
+  ```typescript
+  const trackedIds = this.instrumentToPositions.get(instrumentId);
+  if (!trackedIds || trackedIds.size === 0) return;
+  ```
+- DB query only runs when the map confirms at least one position is tracked
+- DB remains authoritative for mutable fields (current_sl updated by trailing-stop service)
+
+**Tests updated:** `position-monitoring.service.spec.ts` updated to call `addPosition()` before `processTick()` via the new `registerAndSetupFind()` helper, mirroring the correct production lifecycle.
+
+**Commit:** `c636d0dd544895ea2f8ad3b20958c4a2e38cefba`
