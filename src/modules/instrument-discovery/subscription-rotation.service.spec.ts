@@ -94,7 +94,9 @@ const mockDhanWsClient = {
   subscribe: jest.fn(),
   unsubscribe: jest.fn(),
   connect: jest.fn().mockResolvedValue(undefined),
-  get sessionState() { return 'CONNECTED' as const; },
+  get sessionState() {
+    return 'CONNECTED' as const;
+  },
 };
 
 const mockInstrumentDiscoveryService = {
