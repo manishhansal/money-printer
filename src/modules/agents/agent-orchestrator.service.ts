@@ -145,7 +145,30 @@ export class AgentOrchestratorService {
     }
 
     const completedAt = new Date();
-    const timedOut = state.analystOutputs.filter((a) => a.source === 'TIMEOUT_FALLBACK').length;
+
+    // Count timeouts across ALL phases, not just Phase 1 analysts.
+    // A phase-level fallback (source === 'TIMEOUT_FALLBACK') is counted once
+    // per agent role that did not complete within its budget.
+    const analystTimeouts = state.analystOutputs.filter(
+      (a) => a.source === 'TIMEOUT_FALLBACK',
+    ).length;
+    const bullTimeout = state.bullResearch?.source === 'TIMEOUT_FALLBACK' ? 1 : 0;
+    const bearTimeout = state.bearResearch?.source === 'TIMEOUT_FALLBACK' ? 1 : 0;
+    const researchManagerTimeout = state.researchManager?.source === 'TIMEOUT_FALLBACK' ? 1 : 0;
+    const traderProposalTimeout = state.traderProposal?.source === 'TIMEOUT_FALLBACK' ? 1 : 0;
+    const riskAnalystTimeouts = state.riskAnalystOutputs.filter(
+      (r) => r.source === 'TIMEOUT_FALLBACK',
+    ).length;
+    const portfolioManagerTimeout = state.portfolioManager?.source === 'TIMEOUT_FALLBACK' ? 1 : 0;
+
+    const timedOut =
+      analystTimeouts +
+      bullTimeout +
+      bearTimeout +
+      researchManagerTimeout +
+      traderProposalTimeout +
+      riskAnalystTimeouts +
+      portfolioManagerTimeout;
 
     const decision: ResearchDecision = {
       workflowId,

@@ -1,0 +1,13 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Session Stop — Final Diff and Validation Review",
+      "trigger": "Stop",
+      "action": {
+        "type": "agent",
+        "prompt": "The Kiro session for MoneyPrinter is ending. Perform a final review before closing:\\n\\n1. **Git diff summary**: `cd /Users/manishkumar/Desktop/money-printer && git diff --stat HEAD 2>&1 | head -20`\\n\\n2. **TypeScript check**: `cd /Users/manishkumar/Desktop/money-printer && npx tsc --noEmit 2>&1 | head -20`\\n\\n3. **Quick test run**: `cd /Users/manishkumar/Desktop/money-printer && npx jest --no-coverage --runInBand --forceExit --testTimeout=10000 2>&1 | tail -10`\\n\\nReport:\\n```\\n🏁 Session Stop Review\\n📝 Changed files: N\\n✓/❌ TypeScript: clean / N errors\\n✓/❌ Tests: N passed / M failed\\n```\\n\\nIf there are unresolved failures, list them and their status (fixed, in-progress, blocked)."
+      }
+    }
+  ]
+}

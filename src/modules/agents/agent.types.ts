@@ -24,6 +24,18 @@
 
 export type LlmProvider = 'openai' | 'anthropic' | 'disabled';
 
+/**
+ * Fine-grained provider availability status.
+ *
+ * Separates "configured" from "credentials present" so the dashboard can
+ * surface actionable information rather than a single boolean.
+ *
+ *  DISABLED            — LLM_PROVIDER=disabled; deterministic rule-based mode
+ *  CREDENTIALS_MISSING — provider set but API key absent/empty
+ *  CONFIGURED          — provider set and key present (connectivity not verified)
+ */
+export type LlmAvailabilityStatus = 'DISABLED' | 'CREDENTIALS_MISSING' | 'CONFIGURED';
+
 export interface LlmConfig {
   provider: LlmProvider;
   model: string;

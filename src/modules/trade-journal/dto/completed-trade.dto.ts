@@ -114,4 +114,14 @@ export class CompletedTradeDto {
 
   /** Dhan order ID for the exit leg. */
   dhanExitOrderId?: string | null;
+
+  /**
+   * Optional: workflow ID of the AgentOrchestratorService research decision
+   * that preceded this trade. When provided, DecisionMemoryService.settle()
+   * is called after the trade is journaled to close the research feedback loop.
+   *
+   * NULL for trades that were not preceded by an agent workflow (e.g. manual
+   * exits, paper trades without an agent session).
+   */
+  workflowId?: string | null;
 }

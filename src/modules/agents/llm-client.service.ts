@@ -21,7 +21,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SecretsService } from '../secrets/secrets.service';
-import { LlmConfig, LlmRequest, LlmResponse, LlmProvider } from './agent.types';
+import {
+  LlmConfig,
+  LlmRequest,
+  LlmResponse,
+  LlmProvider,
+  LlmAvailabilityStatus,
+} from './agent.types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -46,6 +52,12 @@ export class LlmUnavailableError extends Error {
     this.name = 'LlmUnavailableError';
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Provider Availability
+// ─────────────────────────────────────────────────────────────────────────────
+
+// LlmAvailabilityStatus is defined and exported from agent.types.ts
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Service
@@ -95,10 +107,15 @@ export class LlmClientService {
 
     const startMs = Date.now();
 
-    // Wrap the actual API call in a timeout race
+    // Wrap the actual API call in a timeout race.
+    // The timer handle is always cleared to prevent open-handle leaks in tests
+    // and to avoid running the rejection callback after the Promise has already
+    // resolved or rejected from another branch.
     const apiCall = this.callProvider(config, request);
+
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => {
+      timeoutHandle = setTimeout(() => {
         reject(new LlmTimeoutError(config.provider, config.timeoutMs));
       }, config.timeoutMs);
     });
@@ -113,11 +130,18 @@ export class LlmClientService {
     } catch (err) {
       if (err instanceof LlmTimeoutError || err instanceof LlmUnavailableError) throw err;
       throw new LlmUnavailableError(`${config.provider} call failed: ${(err as Error).message}`);
+    } finally {
+      // Always clear the timeout timer so the event loop can drain cleanly.
+      if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
     }
   }
 
   /**
    * Check if the LLM provider is configured and available.
+   *
+   * NOTE: This only checks whether the provider is NOT disabled.
+   * It does NOT verify credentials or network reachability.
+   * Use getAvailabilityStatus() for a more precise status.
    */
   isAvailable(): boolean {
     return this.defaultConfig.provider !== 'disabled';
@@ -125,6 +149,30 @@ export class LlmClientService {
 
   getProvider(): LlmProvider {
     return this.defaultConfig.provider;
+  }
+
+  /**
+   * Returns a fine-grained availability status that separates:
+   *   - DISABLED: LLM_PROVIDER=disabled, rule-based mode is authoritative
+   *   - CREDENTIALS_MISSING: provider configured but API key absent/empty
+   *   - CONFIGURED: provider set and key present (connectivity not verified)
+   *
+   * This does NOT make a live network call — it inspects local config only.
+   * Use it for dashboard display and health reporting.
+   */
+  async getAvailabilityStatus(): Promise<LlmAvailabilityStatus> {
+    if (this.defaultConfig.provider === 'disabled') return 'DISABLED';
+
+    const keyName =
+      this.defaultConfig.provider === 'openai' ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY';
+
+    try {
+      const key = await this.secretsService.get(keyName);
+      if (!key || key.trim() === '') return 'CREDENTIALS_MISSING';
+      return 'CONFIGURED';
+    } catch {
+      return 'CREDENTIALS_MISSING';
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────

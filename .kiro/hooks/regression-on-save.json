@@ -2,12 +2,12 @@
   "version": "v1",
   "hooks": [
     {
-      "name": "Regression Check After Save",
+      "name": "Regression Check After Critical Module Save",
       "trigger": "PostFileSave",
-      "matcher": "src/modules/(watchdog|risk-management|execution|live-trading|reconciliation|position-monitoring|trailing-stop)/.*\\\\.ts$",
+      "matcher": "src/modules/(watchdog|risk-management|execution|live-trading|reconciliation|position-monitoring|trailing-stop)/.*\\.ts$",
       "action": {
         "type": "agent",
-        "prompt": "A critical trading module file was just saved. Run targeted regression tests immediately.\n\n1. Run the matching spec if it exists: `cd /Users/manishkumar/Desktop/money-printer && npx jest --testPathPattern=\"$(basename {SAVED_FILE} .ts).spec\" --no-coverage --runInBand 2>&1 | tail -20`\n\n2. Run the watchdog test suite to verify monitoring is unaffected: `cd /Users/manishkumar/Desktop/money-printer && npx jest --testPathPattern=\"local-market-watchdog.service.spec\" --no-coverage --runInBand 2>&1 | tail -10`\n\n3. TypeScript check: `cd /Users/manishkumar/Desktop/money-printer && npx tsc --noEmit 2>&1 | head -20`\n\nReport results as:\n```\n🔁 Regression check: {SAVED_FILE}\n✓/❌ Matching spec: N passed / M failed\n✓/❌ Watchdog suite: 19 passed\n✓/❌ TypeScript: clean / N errors\n```\n\nIf any test fails, identify the root cause and fix it before marking complete. Do NOT weaken or delete failing tests — fix the underlying code issue."
+        "prompt": "A critical trading module file was just saved in the MoneyPrinter project. Run these targeted regression checks:\n\n1. Run TypeScript check: `cd /Users/manishkumar/Desktop/money-printer && npx tsc --noEmit 2>&1 | head -20`\n\n2. Run the watchdog test suite: `cd /Users/manishkumar/Desktop/money-printer && npx jest --testPathPattern=\"local-market-watchdog.service.spec\" --no-coverage --runInBand --forceExit 2>&1 | tail -10`\n\n3. Run risk management tests: `cd /Users/manishkumar/Desktop/money-printer && npx jest --testPathPattern=\"risk-management|daily-loss|execution.service\" --no-coverage --runInBand --forceExit 2>&1 | tail -10`\n\nReport results as:\n```\n🔁 Regression check for critical module\n✓/❌ TypeScript: clean / N errors\n✓/❌ Watchdog suite: N passed\n✓/❌ Risk/Execution suite: N passed\n```\n\nIf any test fails, identify the root cause and fix the underlying code issue. Do NOT weaken or delete failing tests."
       }
     }
   ]
