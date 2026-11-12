@@ -5,13 +5,21 @@
  *   If PostgreSQL and Redis connections are not established within 10 seconds,
  *   the process logs the failure and exits with code 1.
  *   The CloudEngine must never accept API requests with degraded infrastructure.
+ *
+ * Production hardening (Phase 10):
+ *   - helmet: sets 14 security HTTP response headers (CSP, HSTS, X-Frame-Options, etc.)
+ *   - compression: gzip/deflate for API responses > 1KB (reduces payload by ~70%)
+ *   - validateEnv(): fast-fail on missing critical environment variables
  */
 
 import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
+import helmet from 'helmet';
+import compression from 'compression';
 import { AppModule } from './app.module';
+import { validateEnv } from './common/config/env-validation';
 
 /** Maximum milliseconds allowed for all infrastructure connections on startup. */
 const STARTUP_CONNECTION_TIMEOUT_MS = 10_000;
@@ -41,6 +49,9 @@ async function bootstrap(): Promise<void> {
   });
 
   try {
+    // ── Phase 10: Validate required env vars before creating the app ──────
+    validateEnv(process.env.NODE_ENV !== 'test');
+
     const app = await Promise.race([
       NestFactory.create<NestExpressApplication>(AppModule),
       connectionTimeoutGuard,
@@ -49,8 +60,37 @@ async function bootstrap(): Promise<void> {
     // Connections succeeded — cancel the deadline timer.
     clearTimeout(timeoutHandle);
 
+    // ── Phase 10: Security headers via helmet ─────────────────────────────
+    // Configured to allow the dashboard's inline scripts and styles.
+    app.use(
+      helmet({
+        contentSecurityPolicy: {
+          directives: {
+            defaultSrc: ["'self'"],
+            // Dashboard HTML uses inline <style> and <script> blocks.
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            scriptSrc: ["'self'", "'unsafe-inline'"],
+            // Allow WebSocket connections back to the CloudEngine.
+            connectSrc: ["'self'", 'ws://localhost:*', 'wss://*'],
+            imgSrc: ["'self'", 'data:'],
+            fontSrc: ["'self'"],
+          },
+        },
+        // HSTS: 1 year, include subdomains (disable in dev if using HTTP).
+        strictTransportSecurity:
+          process.env.NODE_ENV === 'production'
+            ? { maxAge: 31_536_000, includeSubDomains: true }
+            : false,
+      }),
+    );
+
+    // ── Phase 10: Gzip compression for API responses ──────────────────────
+    // Skips already-compressed content (images, pre-compressed bundles).
+    // Reduces JSON API payloads by ~70% on average.
+    app.use(compression());
+
     // Serve the browser dashboard from the public/ directory.
-    // GET http://localhost:{PORT}/dashboard → public/index.html
+    // GET http://localhost:{PORT}/ → public/index.html
     app.useStaticAssets(join(__dirname, '..', 'public'));
 
     // CORS — allow Chrome extensions and localhost origins.
@@ -79,6 +119,10 @@ async function bootstrap(): Promise<void> {
 
     const port = parseInt(process.env.PORT ?? '3000', 10);
     await app.listen(port);
+
+    // Enable graceful shutdown so NestJS calls `onModuleDestroy()` on SIGTERM/SIGINT.
+    // This allows DhanWebSocketClient, timers, and DB connections to close cleanly.
+    app.enableShutdownHooks();
 
     logger.log(`CloudEngine is running on http://localhost:${port}`);
     logger.log(`Environment: ${process.env.NODE_ENV ?? 'development'}`);

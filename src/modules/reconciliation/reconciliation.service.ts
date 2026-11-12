@@ -34,9 +34,9 @@
  * Requirements: 12.4, 17.6, 19.1, 19.2, 19.3, 19.4
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, Not } from 'typeorm';
+import { Repository, In, Not, IsNull, LessThan } from 'typeorm';
 import { Cron } from '@nestjs/schedule';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -84,7 +84,7 @@ const PNL_TOLERANCE_RS = 1.0;
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Injectable()
-export class ReconciliationService {
+export class ReconciliationService implements OnModuleInit {
   private readonly logger = new Logger(ReconciliationService.name);
 
   /**
@@ -114,6 +114,97 @@ export class ReconciliationService {
 
     private readonly notificationService: NotificationService,
   ) {}
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 0. Startup reconciliation
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * On startup, find any LIVE orders stuck in `pending` state with no Dhan
+   * order ID that are more than 5 minutes old. These represent orders where
+   * the CloudEngine crashed between DB persistence (Step 1) and broker
+   * submission (Step 3) in ExecutionService. Recovery path:
+   *
+   *   - Has dhan_correlation_id → query Dhan via getOrderByCorrelationId()
+   *     - Found: update status to `submitted` with the Dhan order ID
+   *     - Not found: mark as `rejected` (never reached Dhan)
+   *   - No correlation ID: mark as `rejected`
+   *
+   * Runs asynchronously 5 seconds after module init to allow DB connections
+   * to fully stabilise. Non-fatal: errors are logged, never re-thrown.
+   */
+  onModuleInit(): void {
+    setTimeout(() => {
+      void this.reconcileStaleOrders();
+    }, 5_000);
+  }
+
+  private async reconcileStaleOrders(): Promise<void> {
+    // Orders created more than 5 minutes ago and still pending.
+    const staleCutoff = new Date(Date.now() - 5 * 60 * 1_000);
+
+    try {
+      const staleOrders = await this.orderRepository.find({
+        where: {
+          engine: 'LIVE',
+          status: 'pending',
+          dhan_order_id: IsNull(),
+          created_at: LessThan(staleCutoff),
+        },
+      });
+
+      if (staleOrders.length === 0) {
+        this.logger.log('[Startup] No stale pending orders — nothing to reconcile');
+        return;
+      }
+
+      this.logger.warn(
+        `[Startup] ${staleOrders.length} stale pending LIVE order(s) found — reconciling`,
+      );
+
+      let recovered = 0;
+      let rejected = 0;
+
+      for (const order of staleOrders) {
+        // Try to recover via Dhan correlation ID.
+        if (order.dhan_correlation_id) {
+          try {
+            const dhanOrder = await this.dhanApiClient.getOrderByCorrelationId(
+              order.dhan_correlation_id,
+            );
+            if (dhanOrder?.orderId) {
+              await this.orderRepository.update(order.id, {
+                status: 'submitted',
+                dhan_order_id: dhanOrder.orderId,
+                submitted_at: new Date(),
+              });
+              this.logger.log(
+                `[Startup] Recovered order id=${order.id} → dhanOrderId=${dhanOrder.orderId}`,
+              );
+              recovered++;
+              continue;
+            }
+          } catch {
+            /* lookup failed — treat as lost below */
+          }
+        }
+
+        // Not found in Dhan — order never reached the broker.
+        await this.orderRepository.update(order.id, {
+          status: 'rejected',
+          rejection_reason: 'startup-reconciliation: order never reached broker (stale pending)',
+        });
+        this.logger.warn(`[Startup] Rejected stale order id=${order.id}`);
+        rejected++;
+      }
+
+      this.logger.log(
+        `[Startup] Stale order reconciliation complete — recovered=${recovered} rejected=${rejected}`,
+      );
+    } catch (err) {
+      this.logger.error(`[Startup] Stale order reconciliation failed: ${(err as Error).message}`);
+    }
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // 1. EOD Reconciliation

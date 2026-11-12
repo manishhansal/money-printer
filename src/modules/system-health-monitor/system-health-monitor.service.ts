@@ -24,11 +24,17 @@
  * Transitions detected via this method also publish CRITICAL alerts immediately,
  * independent of the 30-second poll interval.
  *
+ * recordLatency() — allows other modules to push a latency sample (ms) for
+ * order_execution_latency or websocket_feed_latency. Each metric maintains a
+ * rolling window of the last 1,000 samples from which p50/p95/p99 percentiles
+ * are computed on demand via getLatencyPercentiles().
+ *
  * Requirements: 2.7, 2.8, 20.8, 20.9
  */
 
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { OnEvent } from '@nestjs/event-emitter';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
@@ -59,6 +65,33 @@ export const ALL_METRICS: HealthMetricName[] = [
   'order_execution_latency',
 ];
 
+/** Latency metrics that support p50/p95/p99 percentile tracking. */
+const LATENCY_METRICS: HealthMetricName[] = ['websocket_feed_latency', 'order_execution_latency'];
+
+/** Maximum samples per rolling window (last N observations). */
+const LATENCY_WINDOW_SIZE = 1_000;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Latency Percentile Result
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface LatencyPercentiles {
+  /** Number of samples in the rolling window. */
+  count: number;
+  /** 50th percentile (median) latency in milliseconds. */
+  p50: number;
+  /** 95th percentile latency in milliseconds. */
+  p95: number;
+  /** 99th percentile latency in milliseconds. */
+  p99: number;
+  /** Minimum observed latency in milliseconds. */
+  min: number;
+  /** Maximum observed latency in milliseconds. */
+  max: number;
+  /** Arithmetic mean latency in milliseconds. */
+  mean: number;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Service
 // ─────────────────────────────────────────────────────────────────────────────
@@ -77,6 +110,13 @@ export class SystemHealthMonitorService {
    */
   private readonly states = new Map<HealthMetricName, HealthStatus>();
 
+  /**
+   * Rolling latency windows for websocket_feed_latency and
+   * order_execution_latency. Each window holds the last LATENCY_WINDOW_SIZE
+   * samples (oldest evicted first).
+   */
+  private readonly latencyWindows = new Map<HealthMetricName, number[]>();
+
   constructor(
     private readonly redisService: RedisService,
     private readonly notificationService: NotificationService,
@@ -84,6 +124,9 @@ export class SystemHealthMonitorService {
   ) {
     for (const metric of ALL_METRICS) {
       this.states.set(metric, 'Healthy');
+    }
+    for (const metric of LATENCY_METRICS) {
+      this.latencyWindows.set(metric, []);
     }
   }
 
@@ -191,9 +234,78 @@ export class SystemHealthMonitorService {
     }
   }
 
+  /**
+   * Records a latency sample (in milliseconds) for a latency metric.
+   *
+   * Maintains a rolling window of the last LATENCY_WINDOW_SIZE (1,000)
+   * samples per metric. Oldest samples are evicted once the window is full.
+   * Call this from DhanApiClient (order_execution_latency) and
+   * DhanWebSocketClient (websocket_feed_latency) after each timed operation.
+   *
+   * @param metric The latency metric to record against.
+   * @param ms     Observed latency in milliseconds.
+   */
+  recordLatency(metric: 'websocket_feed_latency' | 'order_execution_latency', ms: number): void {
+    const window = this.latencyWindows.get(metric);
+    if (!window) return;
+    window.push(ms);
+    if (window.length > LATENCY_WINDOW_SIZE) {
+      window.shift();
+    }
+  }
+
+  /**
+   * Computes p50/p95/p99 percentile latency statistics from the rolling window
+   * for the given metric.
+   *
+   * Returns zero-valued stats when no samples have been recorded yet.
+   *
+   * @param metric The latency metric to compute percentiles for.
+   */
+  getLatencyPercentiles(
+    metric: 'websocket_feed_latency' | 'order_execution_latency',
+  ): LatencyPercentiles {
+    const window = this.latencyWindows.get(metric) ?? [];
+    if (window.length === 0) {
+      return { count: 0, p50: 0, p95: 0, p99: 0, min: 0, max: 0, mean: 0 };
+    }
+
+    const sorted = [...window].sort((a, b) => a - b);
+    const n = sorted.length;
+
+    const percentile = (p: number): number => {
+      const idx = Math.min(Math.floor((p / 100) * n), n - 1);
+      return sorted[idx];
+    };
+
+    const mean = sorted.reduce((s, v) => s + v, 0) / n;
+
+    return {
+      count: n,
+      p50: percentile(50),
+      p95: percentile(95),
+      p99: percentile(99),
+      min: sorted[0],
+      max: sorted[n - 1],
+      mean: Math.round(mean * 100) / 100,
+    };
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   // Active health checks
   // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Records order execution latency emitted by DhanApiClient after each
+   * successful Dhan API request via the 'dhan.order.latency' event.
+   *
+   * Feeds the `order_execution_latency` rolling window so that
+   * getLatencyPercentiles() returns real p50/p95/p99 metrics.
+   */
+  @OnEvent('dhan.order.latency')
+  onDhanOrderLatency(payload: { latencyMs: number }): void {
+    this.recordLatency('order_execution_latency', payload.latencyMs);
+  }
 
   /**
    * Runs `SELECT 1` against PostgreSQL and classifies the response:
