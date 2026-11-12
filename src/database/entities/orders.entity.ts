@@ -32,7 +32,15 @@ export type TransactionType = 'BUY' | 'SELL';
 
 /** Full set of lifecycle statuses an order can occupy. */
 export type OrderStatus =
-  'pending' | 'submitted' | 'open' | 'partial' | 'complete' | 'cancelled' | 'rejected';
+  | 'pending'
+  | 'submitted'
+  | 'open'
+  | 'partial'
+  | 'complete'
+  | 'cancelled'
+  | 'rejected'
+  | 'modify-pending' // DB-first intent record: broker modification in-flight
+  | 'cancel-pending'; // DB-first intent record: broker cancellation in-flight
 
 @Entity('orders')
 @Index('idx_orders_instrument_status', ['instrument_id', 'status'])
