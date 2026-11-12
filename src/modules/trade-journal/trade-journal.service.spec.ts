@@ -342,6 +342,93 @@ describe('TradeJournalService', () => {
       expect(saved.exit_classification).toBeNull();
       expect(saved.execution_quality).toBeNull();
     });
+
+    it('should NOT call settle when workflowId is absent (DecisionMemoryService is null)', async () => {
+      // With no DecisionMemoryService provider, the @Optional() injection resolves to null.
+      // recordCompletedTrade must complete without throwing.
+      const dto: CompletedTradeDto = { ...completedTradeDto, workflowId: undefined };
+      await expect(service.recordCompletedTrade(dto)).resolves.toBeUndefined();
+      expect(tradesRepo.save).toHaveBeenCalledTimes(1);
+    });
+
+    it('should call DecisionMemoryService.settle() when workflowId is provided', async () => {
+      // Build a fresh test module that includes a mock DecisionMemoryService.
+      const mockDecisionMemory = { settle: jest.fn().mockResolvedValue(undefined) };
+
+      const moduleWithMemory = await Test.createTestingModule({
+        providers: [
+          TradeJournalService,
+          { provide: getRepositoryToken(Signals), useValue: mockRepo() },
+          { provide: getRepositoryToken(Order), useValue: mockRepo() },
+          { provide: getRepositoryToken(Execution), useValue: mockRepo() },
+          { provide: getRepositoryToken(Position), useValue: mockRepo() },
+          { provide: getRepositoryToken(Trade), useValue: mockRepo() },
+          { provide: getRepositoryToken(RiskEvents), useValue: mockRepo() },
+          { provide: getRepositoryToken(SystemHealthEvents), useValue: mockRepo() },
+          { provide: getRepositoryToken(AuditLogs), useValue: mockRepo() },
+          { provide: EventEmitter2, useValue: { emit: jest.fn() } },
+          { provide: 'DecisionMemoryService', useValue: mockDecisionMemory },
+        ],
+      })
+        .overrideProvider('DecisionMemoryService')
+        .useValue(mockDecisionMemory)
+        .compile();
+
+      // Manually provide DecisionMemoryService via the @Optional path by
+      // injecting it directly. We simulate the wired-up path by calling
+      // the service with the mock in place.
+      const svcWithMemory = moduleWithMemory.get<TradeJournalService>(TradeJournalService);
+
+      const dto: CompletedTradeDto = {
+        ...completedTradeDto,
+        netPnl: '360.40',
+        workflowId: 'workflow-uuid-123',
+      };
+
+      // Inject mock decision memory directly on the private field
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (svcWithMemory as any).decisionMemory = mockDecisionMemory;
+
+      await svcWithMemory.recordCompletedTrade(dto);
+
+      // Allow the non-blocking void promise to resolve
+      await new Promise((r) => setImmediate(r));
+
+      expect(mockDecisionMemory.settle).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workflowId: 'workflow-uuid-123',
+          wasExecuted: true,
+          outcome: 'PROFITABLE',
+          directionCorrect: true,
+        }),
+      );
+    });
+
+    it('should NOT block trade journaling when DecisionMemoryService.settle() throws', async () => {
+      const mockDecisionMemory = {
+        settle: jest.fn().mockRejectedValue(new Error('DB unavailable')),
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (service as any).decisionMemory = mockDecisionMemory;
+
+      const dto: CompletedTradeDto = {
+        ...completedTradeDto,
+        netPnl: '-50.00',
+        workflowId: 'workflow-fail-test',
+      };
+
+      // Must resolve without throwing despite settle() failing
+      await expect(service.recordCompletedTrade(dto)).resolves.toBeUndefined();
+      expect(tradesRepo.save).toHaveBeenCalledTimes(1);
+
+      // Let void promise run
+      await new Promise((r) => setImmediate(r));
+
+      // Reset for other tests
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (service as any).decisionMemory = null;
+    });
   });
 
   describe('recordRiskEvent', () => {

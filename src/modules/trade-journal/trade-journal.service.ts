@@ -20,7 +20,7 @@
  * Requirements: 13.1, 13.2, 13.3, 13.4, 13.5, 13.6, 13.7, 13.8
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -43,6 +43,7 @@ import { CompletedTradeDto } from './dto/completed-trade.dto';
 import { RiskEventDto } from './dto/risk-event.dto';
 import { SystemErrorDto } from './dto/system-error.dto';
 import { ConfigChangeDto } from './dto/config-change.dto';
+import { DecisionMemoryService } from '../agents/decision-memory.service';
 
 /** Event name published when all write retries are exhausted. */
 export const JOURNAL_WRITE_FAILED_EVENT = 'trade-journal.write.failed';
@@ -96,6 +97,14 @@ export class TradeJournalService {
     private readonly auditLogsRepo: Repository<AuditLogs>,
 
     private readonly eventEmitter: EventEmitter2,
+
+    /**
+     * @Optional() — AgentsModule may not be loaded in all test environments.
+     * When present, settlement is called after a completed trade is journaled
+     * so that research decisions accumulate outcome data for calibration.
+     */
+    @Optional()
+    private readonly decisionMemory: DecisionMemoryService | null,
   ) {}
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -179,6 +188,27 @@ export class TradeJournalService {
     await this.writeWithRetry('completed_trades', SLA_STANDARD_MS, () =>
       this.insertCompletedTrade(data),
     );
+
+    // Settle the agent research decision that preceded this trade, if any.
+    // Non-blocking — a settlement failure must never block trade journaling.
+    if (data.workflowId && this.decisionMemory) {
+      const netPnl = parseFloat(data.netPnl);
+      const outcome = netPnl > 0 ? 'PROFITABLE' : netPnl < 0 ? 'LOSS' : ('BREAKEVEN' as const);
+      void this.decisionMemory
+        .settle({
+          workflowId: data.workflowId,
+          wasExecuted: true,
+          tradeId: data.positionId,
+          actualNetPnl: netPnl,
+          outcome,
+          directionCorrect: netPnl >= 0,
+        })
+        .catch((err: Error) =>
+          this.logger.warn(
+            `Decision settlement failed for workflow ${data.workflowId}: ${err.message}`,
+          ),
+        );
+    }
   }
 
   /**

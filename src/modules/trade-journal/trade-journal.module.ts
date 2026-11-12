@@ -42,6 +42,7 @@ import { SystemHealthEvents } from '../../database/entities/system-health-events
 import { AuditLogs } from '../../database/entities/audit-logs.entity';
 
 import { NotificationModule } from '../notification/notification.module';
+import { AgentsModule } from '../agents/agents.module';
 
 import { TradeJournalService } from './trade-journal.service';
 import { TradeJournalAlertListener } from './trade-journal-alert.listener';
@@ -61,6 +62,10 @@ import { TradeJournalAlertListener } from './trade-journal-alert.listener';
     // Provides NotificationService to TradeJournalAlertListener so that
     // all-retry-failure events are forwarded as CRITICAL operator alerts.
     NotificationModule,
+    // Provides DecisionMemoryService (@Optional injection) so that completed
+    // trades can settle their corresponding agent research decisions for
+    // calibration and reflection. Requirements: Phase 11.
+    AgentsModule,
   ],
   providers: [TradeJournalService, TradeJournalAlertListener],
   exports: [TradeJournalService],
