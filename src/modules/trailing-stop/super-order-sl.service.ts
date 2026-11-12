@@ -233,8 +233,9 @@ export class SuperOrderSlService {
     }
 
     try {
-      const orderStatus = await this.dhanApiClient.getOrderById(entry.dhanOrderId)
-        .then(o => o.orderStatus)
+      const orderStatus = await this.dhanApiClient
+        .getOrderById(entry.dhanOrderId)
+        .then((o) => o.orderStatus)
         .catch(() => null);
 
       if (orderStatus && ACTIVE_SL_STATUSES.has(orderStatus)) {

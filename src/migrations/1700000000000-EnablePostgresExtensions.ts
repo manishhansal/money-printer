@@ -21,7 +21,7 @@ export class EnablePostgresExtensions1700000000000 implements MigrationInterface
     await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS "pgcrypto"`);
   }
 
-  public async down(queryRunner: QueryRunner): Promise<void> {
+  public async down(_queryRunner: QueryRunner): Promise<void> {
     // Extensions are shared infrastructure; dropping them in a revert is
     // intentionally skipped to avoid breaking other database objects.
     // To remove them, do so manually with: DROP EXTENSION IF EXISTS "uuid-ossp";
