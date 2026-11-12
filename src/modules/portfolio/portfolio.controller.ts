@@ -14,6 +14,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { PaperTrade } from '../../database/entities/paper-trades.entity';
+import { getISTStartOfDay } from '../../common/utils/ist-time.utils';
 import { Trade } from '../../database/entities/trades.entity';
 
 export interface ChargeBreakdown {
@@ -104,8 +105,8 @@ export class PortfolioController {
    * GET /portfolio/summary
    *
    * Returns today's session P&L for both engines with full charge breakdown.
-   * "Today" is defined as trades closed since midnight UTC — covers the full
-   * NSE trading session (09:15–15:30 IST) in a single calendar day.
+   * "Today" is defined as trades closed since midnight IST — aligns with
+   * the Indian trading calendar (09:15–15:30 IST).
    *
    * Response shape:
    * {
@@ -116,8 +117,7 @@ export class PortfolioController {
    */
   @Get('summary')
   async getSummary(): Promise<PortfolioSummaryResponse> {
-    const startOfDay = new Date();
-    startOfDay.setUTCHours(0, 0, 0, 0);
+    const startOfDay = getISTStartOfDay();
 
     const [paperRows, liveRows] = await Promise.all([
       this.paperTradesRepo
