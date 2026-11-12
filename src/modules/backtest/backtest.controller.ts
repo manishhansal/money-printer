@@ -14,6 +14,11 @@ import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MoreThanOrEqual, Repository } from 'typeorm';
 import { BacktestService } from './backtest.service';
+import {
+  DhanHistoricalBackfillService,
+  BackfillRequest,
+  BackfillResult,
+} from './dhan-historical-backfill.service';
 import { BacktestConfig, BacktestResult, BacktestTrade, AblationResult } from './backtest.types';
 import { TradingChargesService } from '../charges/trading-charges.service';
 import { Trade } from '../../database/entities/trades.entity';
@@ -48,6 +53,7 @@ export interface ChargeRatesResponse {
 export class BacktestController {
   constructor(
     private readonly backtestService: BacktestService,
+    private readonly backfillService: DhanHistoricalBackfillService,
     private readonly chargesService: TradingChargesService,
     @InjectRepository(Trade)
     private readonly tradesRepo: Repository<Trade>,
@@ -180,5 +186,36 @@ export class BacktestController {
       instrument: t.instrument_id,
       isDelisted: false,
     }));
+  }
+
+  /**
+   * POST /backtest/backfill
+   *
+   * Fetch historical OHLCV candles from the Dhan API and store them in the
+   * `historical_candles` table (DEFECT-005 fix).
+   *
+   * This endpoint resolves the external data blocker: Dhan's historical API
+   * provides daily and intraday candle data for NSE F&O instruments that are
+   * (or were recently) active.  For best coverage:
+   *
+   *   - Use granularity="1d" for multi-year lookbacks (fastest, lowest rate usage).
+   *   - Use granularity="1m" for recent weeks/months (precise entry/exit precision).
+   *   - Filter by underlyingSymbol="NIFTY" or "BANKNIFTY" to scope to index options.
+   *
+   * Requires a valid Dhan session token (DHAN_SESSION_TOKEN env var).
+   *
+   * @example
+   * POST /backtest/backfill
+   * {
+   *   "fromDate": "2024-01-01",
+   *   "toDate": "2024-12-31",
+   *   "granularity": "1d",
+   *   "underlyingSymbol": "NIFTY",
+   *   "limit": 50
+   * }
+   */
+  @Post('backfill')
+  async backfill(@Body() request: BackfillRequest): Promise<BackfillResult> {
+    return this.backfillService.backfill(request);
   }
 }

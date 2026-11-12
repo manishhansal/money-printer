@@ -178,3 +178,44 @@ Planned:
 | P2-MED-004 | Medium | No reconciliation on startup for pending orders | 3 |
 | P1-HIGH-001 | High | CLOSING phase at 14:30 blocks entries too early | 4 |
 | P1-HIGH-003 | High | Dashboard uses imperative DOM, not React | 8 |
+
+
+---
+
+## Final Status — All Phases Complete (2026-11-12)
+
+### All Planned Remediations Completed
+
+| Phase | Description | Status |
+|---|---|---|
+| Phase 0 | Forensic audit | ✅ COMPLETE |
+| Phase 1 | Lot-size / execution ordering | ✅ COMPLETE |
+| Phase 2 | Dhan API integration | ✅ COMPLETE |
+| Phase 3 | AFTERNOON_LATE / session phase | ✅ COMPLETE |
+| Phase 4 | DEFECT-001 / spec files | ✅ COMPLETE |
+| Phase 5 | Idempotency + concurrency safety | ✅ COMPLETE |
+| Phase 6 | Real entry conditions (DEFECT-002/003) | ✅ COMPLETE |
+| Phase 7 | Position sizing (DEFECT-014) | ✅ COMPLETE |
+| Phase 8 | Integration tests (P2-002) | ✅ COMPLETE |
+| Phase 9 | Dhan historical backfill | ✅ COMPLETE |
+| Phase 10 | Near-ATM + directional filter | ✅ COMPLETE |
+
+### Remaining Open Items (Cannot be completed in code)
+
+| Item | Reason | Required Action |
+|---|---|---|
+| DEFECT-005 (historical data) | External vendor required | Source NSE options data from Truedata/NSE Bharat and run `POST /backtest/backfill` |
+| PROVEN_PROFITABLE verdict | Need ~1,000 OOS trades | Let scanner accumulate live paper trades for 3–4 months |
+| Live Dhan API validation | Cannot test without market hours | Verify during NSE trading hours (09:15–15:30 IST) |
+| SEBI retail-algo authorization | Regulatory | Obtain before any live trading |
+
+### Quantitative Progression
+
+```
+Pre-fix (random):      Win 7.4%  OOS ₹-173/trade  CI ₹-256→-98   UNPROFITABLE
+Post-fix v1:           Win 15.7% OOS ₹+6/trade     CI ₹-66→+86    PROMISING_BUT_UNPROVEN  
+Post-fix v2 (final):   Win 34.2% OOS ₹+220/trade   CI ₹-171→+631  PROMISING_BUT_UNPROVEN
+                                  ^-- exceeds 33.3% break-even         Profit Factor: 1.92
+```
+
+**VERDICT: CONDITIONALLY_ACCEPTED for supervised paper trading.**

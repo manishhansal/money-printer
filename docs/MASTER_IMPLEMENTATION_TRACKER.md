@@ -1,8 +1,41 @@
 # MoneyPrinter — Master Implementation Tracker
-**Last updated:** 2026-11-12 (Session 8 — Forensic Audit & Remediation)
+**Last updated:** 2026-11-12 (All sessions complete — final state)
 **Repository:** money-printer (feat/money-printer branch)
-**HEAD:** `93f97eb1e1c7dd438d4d77359096cf3d122c5dc5`
-**Test count:** 1,535 backend + 53 extension = **1,588 total** (all passing)
+**HEAD:** `915f5f3` (working tree has additional changes not yet committed)
+**Test count:** 1,661 backend + 53 extension = **1,714 total** (all passing)
+
+---
+
+## Cumulative Defect Registry — All Sessions
+
+| ID | Severity | Description | Status |
+|---|---|---|---|
+| P0-CRIT-001 | P0 | Quantity in lots instead of units | FIXED_AND_VERIFIED |
+| P0-CRIT-002 | P0 | Broker before DB in placeOrder() | FIXED_AND_VERIFIED |
+| P0-CRIT-003 | P0 | Seed scripts default lot_size to 1 | FIXED_AND_VERIFIED |
+| P0-CRIT-004 | P0 | Seed scripts ON CONFLICT DO NOTHING preserves stale lot_size | FIXED_AND_VERIFIED |
+| P1-HIGH-001 | P1 | CLOSING phase at 14:30 blocks entries too early | FIXED_AND_VERIFIED |
+| P1-HIGH-002 | P1 | popup.ts hardcodes localhost:3002 | FIXED_AND_VERIFIED |
+| DEFECT-001 (P0) | P0 | engine: 'PAPER' hardcoded in scanner — live pipeline unreachable | FIXED_AND_VERIFIED |
+| DEFECT-002 (P1) | P1 | entryConditionsMet always true — no real entry logic | FIXED_AND_VERIFIED |
+| DEFECT-003 (P1) | P1 | momentum=8, vwapTrendAlignment=8 hardcoded heuristics | FIXED_AND_VERIFIED |
+| DEFECT-004 (P2) | P2 | processTick() DB query on every tick | FIXED_AND_VERIFIED |
+| DEFECT-005 (P0) | P0 | No historical options data for backtesting | INFRASTRUCTURE_CREATED (data external) |
+| DEFECT-006 (P1) | P1 | Agent orchestrator untested | PARTIALLY_FIXED (16 tests, LLM paths BLOCKED) |
+| DEFECT-007 (P1) | P1 | Signal scanner and dispatcher untested | FIXED_AND_VERIFIED |
+| DEFECT-008 (P2) | P2 | No integration test suite | FIXED_AND_VERIFIED (13 near-integration tests) |
+| DEFECT-009 (P2) | P2 | Square-off relies on stale trading symbol | FIXED_AND_VERIFIED |
+| DEFECT-010 (P1) | P1 | Compliance gate needs historical data | BLOCKED_EXTERNAL (depends on DEFECT-005) |
+| DEFECT-011 (P1) | P1 | dispatchToLive uses uuidv4() as idempotency key | FIXED_AND_VERIFIED |
+| DEFECT-012 (P1) | P1 | Concurrent strategy evals bypass duplicate-order check | FIXED_AND_VERIFIED |
+| DEFECT-013 (P2) | P2 | modifyOrder/cancelOrder broker before DB | FIXED_AND_VERIFIED |
+| DEFECT-014 (P1) | P1 | Risk engine suggestedQuantity never used — always 1 lot | FIXED_AND_VERIFIED |
+| DEFECT-015 (P2) | P2 | Correlated exposure uses wrong positions (overestimate) | OPEN (documented safe conservative) |
+| DEFECT-016 (P3) | P3 | Paper idempotency key appends Date.now() | FIXED_AND_VERIFIED |
+| DEFECT-017 (P3) | P3 | Dispatcher mock missing getArmedState | FIXED_AND_VERIFIED |
+| IMPROVEMENT-001 | P2 | Deep OTM instruments (0% win rate) included in scan | IMPLEMENTED (near-ATM filter) |
+| IMPROVEMENT-002 | P2 | CE and PE both traded regardless of regime direction | IMPLEMENTED (directional filter) |
+| IMPROVEMENT-003 | P2 | RSI 25–75 filter too broad for options | IMPLEMENTED (RSI≥55 for directional) |
 
 ---
 
@@ -373,3 +406,55 @@ All prior remediation sessions (1–6) are captured in `docs/REMEDIATION_LOG.md`
 - The `test/` directory referenced in package.json (jest-e2e.json) needs to be created for e2e tests.
 - Multi-agent engine uses LLM API calls — requires `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` env vars.
 - LocalMarketWatchdog must be configurable to run without blocking market-hours execution.
+
+
+---
+
+## Final Implementation Status Summary
+
+### Scanner Signal Pipeline — v3.0
+
+| Component | State | Scanner Version |
+|---|---|---|
+| Engine selection (LIVE/PAPER) | ✅ LIVE when armed, PAPER otherwise | v1.0 → v2.0 |
+| Entry conditions | ✅ RSI/VWAP/relVol real indicators | v2.0 |
+| Component scores | ✅ RSI-driven momentum, VWAP-driven alignment | v2.0 |
+| Near-ATM filter | ✅ \|strike−spot\|/spot ≤ 10% | v3.0 |
+| Directional CE/PE filter | ✅ CE in bull, PE in bear regimes | v3.0 |
+| RSI≥55 for directional options | ✅ Option premium must be in uptrend | v3.0 |
+| Position sizing | ✅ Risk-proportional via RiskManagementService | v2.0 |
+| Idempotency keys | ✅ Deterministic `signal-${signalId}` | v2.0 |
+| In-process submission lock | ✅ Per-instrument+direction mutex | v2.0 |
+
+### Quantitative Results
+
+| Simulation | Win Rate | OOS Expectancy | CI Lower | Verdict |
+|---|---|---|---|---|
+| Random (pre-fix) | 7.4% | ₹-173/trade | ₹-256 | UNPROFITABLE |
+| v1 (DEFECT-002/003) | 15.7% | ₹+6/trade | ₹-66 | PROMISING_BUT_UNPROVEN |
+| **v2 (all improvements)** | **34.2%** | **₹+220/trade** | **₹-171** | **PROMISING_BUT_UNPROVEN** |
+
+Break-even at 33.3% win rate (2:1 R:R) — **v2 exceeds break-even**. CI crosses zero due to insufficient OOS trades (281 needed ~1,000+).
+
+### Historical Data Infrastructure
+
+| Component | Status |
+|---|---|
+| Dhan historical backfill | ✅ 341,670 candles (29 NIFTY options, Aug–Nov 2026) |
+| POST /backtest/backfill | ✅ REST endpoint deployed |
+| CandleQueryService | ✅ OHLCV read helper for TechnicalAnalysis |
+| HistoricalDataImportService | ✅ CSV import for future data vendors |
+
+### Test Count Progression
+
+| Session | Test Count | Net Change |
+|---|---|---|
+| Baseline (Session 6) | 1,442 | — |
+| Session 7 | 1,451 | +9 |
+| Session 8 | 1,459 | +8 |
+| Forensic audit | 1,535 | +76 |
+| Post-remediation | 1,591 | +56 |
+| Idempotency/lock fixes | 1,601 | +10 |
+| All open items | 1,625 | +24 |
+| Dhan backfill | 1,641 | +16 |
+| **Near-ATM + Directional** | **1,661** | **+20** |

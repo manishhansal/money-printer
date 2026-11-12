@@ -18,6 +18,9 @@ yarn-error.log*
 
 # Editor directories and files
 .idea
+
+# Generated simulation data (not source code)
+scripts/simulation-results.json
 .vscode
 *.suo
 *.ntvs*

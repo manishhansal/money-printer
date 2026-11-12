@@ -8,10 +8,16 @@
  *    and the EVERY_5_SECONDS cron-based staleness monitor.
  *  - MarketIntelligenceController — GET /market-data/intelligence,
  *    GET /market-data/candles/:instrumentId (React dashboard endpoints).
+ *  - CandleQueryService — typed OHLCV[] read helper over the historical_candles
+ *    table; exported so SignalScannerModule can compute real indicators.
  *
  * Exports:
  *  - MarketDataService — consumed by RiskEngine, LiveTradingService, and
  *    PaperTradingService as a synchronous staleness gate (isMarketDataStale()).
+ *  - MarketDataCacheService — consumed by SignalDispatcherService and others
+ *    for Redis market snapshot reads.
+ *  - CandleQueryService — consumed by SignalScannerService for real indicator
+ *    computation (DEFECT-002 fix).
  *
  * Dependencies:
  *  - ScheduleModule   — enables @Cron decorator used by MarketDataService
@@ -35,6 +41,7 @@ import { HistoricalCandles } from '../../database/entities/historical-candles.en
 import { Instruments } from '../../database/entities/instruments.entity';
 import { MarketDataService } from './market-data.service';
 import { MarketDataCacheService } from './market-data-cache.service';
+import { CandleQueryService } from './candle-query.service';
 import { MarketIntelligenceController } from './market-intelligence.controller';
 import { HistoricalCandleIngestionService } from './historical-candle-ingestion.service';
 
@@ -53,8 +60,11 @@ import { HistoricalCandleIngestionService } from './historical-candle-ingestion.
     MarketDataCacheService,
     // Fetches 1m intraday candles on startup + daily at 15:35 IST.
     HistoricalCandleIngestionService,
+    // Read-only OHLCV[] query helper — exported for use by SignalScannerModule
+    // (DEFECT-002: real indicator computation in signal scanner).
+    CandleQueryService,
   ],
   controllers: [MarketIntelligenceController],
-  exports: [MarketDataService, MarketDataCacheService],
+  exports: [MarketDataService, MarketDataCacheService, CandleQueryService],
 })
 export class MarketDataModule {}

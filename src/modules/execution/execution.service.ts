@@ -472,6 +472,15 @@ export class ExecutionService {
    * Modify an existing pending or open order via DhanApiClient and update the
    * Orders table.
    *
+   * Ordering (NEW_BUG_D fix — mirrors the outbox pattern used in placeOrder):
+   *   1. Persist intended modifications to DB (status = 'modify-pending',
+   *      new field values written).  A crash after this point leaves a durable
+   *      record showing intent; reconciliation via Dhan orderbook can resolve it.
+   *   2. Submit modification to Dhan.
+   *   3. On broker success → update status back to previous status.
+   *   4. On broker failure → revert DB fields to their pre-modification values and
+   *      re-throw so the caller knows the modification was not applied.
+   *
    * @param orderId      DB UUID of the order to modify.
    * @param modification Fields to change.
    */
@@ -479,26 +488,53 @@ export class ExecutionService {
     const order = await this.findOrderOrThrow(orderId);
     const dhanClientId = await this.secretsService.get('DHAN_CLIENT_ID');
 
+    // ── Snapshot pre-modification values for rollback ─────────────────────────
+    const prevStatus = order.status;
+    const prevOrderType = order.order_type;
+    const prevQuantity = order.quantity;
+    const prevPrice = order.price;
+    const prevTriggerPrice = order.trigger_price;
+
     const targetOrderType = modification.orderType ?? order.order_type;
     const targetQuantity = modification.quantity ?? order.quantity;
 
-    await this.dhanApiClient.modifyOrder(order.dhan_order_id!, {
-      dhanClientId,
-      orderId: order.dhan_order_id!,
-      orderType: ORDER_TYPE_MAP[targetOrderType],
-      quantity: targetQuantity,
-      price: modification.price,
-      disclosedQuantity: modification.disclosedQuantity,
-      triggerPrice: modification.triggerPrice,
-      validity: 'DAY',
-    });
-
-    // Update DB record
+    // ── Step 1: Persist intent to DB BEFORE calling broker (NEW_BUG_D fix) ───
     if (modification.orderType) order.order_type = modification.orderType;
     if (modification.quantity != null) order.quantity = modification.quantity;
     if (modification.price != null) order.price = String(modification.price);
     if (modification.triggerPrice != null) order.trigger_price = String(modification.triggerPrice);
+    order.status = 'modify-pending' as Order['status'];
+    await this.ordersRepo.save(order);
 
+    // ── Step 2: Submit modification to broker ─────────────────────────────────
+    try {
+      await this.dhanApiClient.modifyOrder(order.dhan_order_id!, {
+        dhanClientId,
+        orderId: order.dhan_order_id!,
+        orderType: ORDER_TYPE_MAP[targetOrderType],
+        quantity: targetQuantity,
+        price: modification.price,
+        disclosedQuantity: modification.disclosedQuantity,
+        triggerPrice: modification.triggerPrice,
+        validity: 'DAY',
+      });
+    } catch (brokerErr) {
+      // ── Broker rejected the modification — revert DB to pre-modification state
+      order.status = prevStatus as Order['status'];
+      order.order_type = prevOrderType;
+      order.quantity = prevQuantity;
+      order.price = prevPrice;
+      order.trigger_price = prevTriggerPrice;
+      await this.ordersRepo.save(order);
+      this.logger.error(
+        `[Execution] Broker rejected modification for order=${orderId}: ` +
+          `${(brokerErr as Error).message}. DB reverted to pre-modification state.`,
+      );
+      throw brokerErr;
+    }
+
+    // ── Step 3: Broker confirmed — update status back to open ─────────────────
+    order.status = prevStatus as Order['status'];
     const updated = await this.ordersRepo.save(order);
 
     this.logger.log(`[Execution] Order modified: db_id=${orderId}`);
@@ -514,13 +550,38 @@ export class ExecutionService {
    * Cancel an existing pending or open order via DhanApiClient and update the
    * Orders table with status CANCELLED.
    *
+   * Ordering (NEW_BUG_D fix — mirrors the outbox pattern used in placeOrder):
+   *   1. Persist 'cancel-pending' status to DB first.  A crash after this leaves
+   *      a durable record; reconciliation can query Dhan and confirm cancellation.
+   *   2. Submit cancellation to Dhan.
+   *   3. On broker success → update status to 'cancelled'.
+   *   4. On broker failure → revert status to previous value and re-throw.
+   *
    * @param orderId  DB UUID of the order to cancel.
    */
   async cancelOrder(orderId: string): Promise<OrderResponse> {
     const order = await this.findOrderOrThrow(orderId);
 
-    await this.dhanApiClient.cancelOrder(order.dhan_order_id!);
+    // ── Step 1: Persist cancellation intent to DB BEFORE calling broker ───────
+    const prevStatus = order.status;
+    order.status = 'cancel-pending' as Order['status'];
+    await this.ordersRepo.save(order);
 
+    // ── Step 2: Submit cancellation to broker ─────────────────────────────────
+    try {
+      await this.dhanApiClient.cancelOrder(order.dhan_order_id!);
+    } catch (brokerErr) {
+      // ── Revert DB status so the order remains in its previous state ──────────
+      order.status = prevStatus as Order['status'];
+      await this.ordersRepo.save(order);
+      this.logger.error(
+        `[Execution] Broker rejected cancellation for order=${orderId}: ` +
+          `${(brokerErr as Error).message}. DB reverted to ${prevStatus}.`,
+      );
+      throw brokerErr;
+    }
+
+    // ── Step 3: Broker confirmed cancellation — update DB ────────────────────
     order.status = 'cancelled';
     const updated = await this.ordersRepo.save(order);
 
@@ -664,6 +725,10 @@ export class ExecutionService {
   /**
    * Check 4 — no existing PENDING or OPEN order for the same instrument + direction.
    * Queries the Orders table.
+   *
+   * Also treats `modify-pending` and `cancel-pending` as active statuses so that
+   * an in-flight cancellation or modification does not create a gap where a new
+   * duplicate order could sneak through (NEW_BUG_D fix companion).
    */
   private async checkDuplicateOrder(
     instrumentId: string,
@@ -673,7 +738,7 @@ export class ExecutionService {
       where: {
         instrument_id: instrumentId,
         transaction_type: transactionType,
-        status: In(['pending', 'submitted', 'open', 'partial']),
+        status: In(['pending', 'submitted', 'open', 'partial', 'modify-pending', 'cancel-pending']),
       },
     });
 

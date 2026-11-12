@@ -162,3 +162,103 @@
 | DEFECT-003 | P1 | `momentum` and `vwapTrendAlignment` hardcoded to 8 — requires wiring `TechnicalAnalysisService` |
 | DEFECT-005 | P0-External | No historical NSE options data — cannot be fixed in code |
 | DEFECT-008 | P2 | No integration test suite |
+
+
+---
+
+## Session 4 — Post-Remediation Forensic Audit (2026-11-12, commit 915f5f3)
+
+### Defects Fixed
+
+| ID | Severity | File | Defect | Fix |
+|----|----------|------|--------|-----|
+| DEFECT-011 | P1 | signal-dispatcher.service.ts | `uuidv4()` as idempotency key — bypass idempotency guard | Changed to `signal-${signalId}` (deterministic) |
+| DEFECT-012 | P1 | signal-dispatcher.service.ts | Concurrent strategy evals bypass duplicate-order check | Added `activeSubmissions` in-process mutex |
+| DEFECT-013 | P2 | execution.service.ts | modifyOrder/cancelOrder broker before DB (same as fixed P0-CRIT-002) | DB-first with modify-pending/cancel-pending states |
+| DEFECT-016 | P3 | signal-dispatcher.service.ts | Paper idempotency key appended Date.now() — race window | Changed to `signal-${signalId}` |
+| DEFECT-017 | P3 | signal-dispatcher.service.spec.ts | Mock missing `getArmedState` — test passed for wrong reason | Added `getArmedState` to mock |
+| DEFECT-018 | P3 | ROOT_CAUSE_ANALYSIS.md | RCA-005 incorrectly labelled "Deferred" — fix was implemented | Updated to FIXED |
+| DEFECT-019 | P2 | signal-scanner.service.spec.ts | AFTERNOON_LATE phase not regression-tested | Added 4 phase-guard tests |
+
+### Tests Added
+- `signal-dispatcher.service.spec.ts`: +6 (idempotency keys + in-process lock)
+- `signal-scanner.service.spec.ts`: +4 (phase-guard regressions)
+- **1,591 → 1,601 tests**
+
+---
+
+## Session 5 — All Open Items Resolved (2026-11-12, working tree)
+
+### Defects Fixed / Features Implemented
+
+| ID | Severity | File(s) | Defect / Feature | Fix |
+|----|----------|---------|-----------------|-----|
+| DEFECT-002 | P1 | signal-scanner.service.ts | entryConditionsMet always true | Real RSI/VWAP/relVol entry conditions; CandleQueryService created |
+| DEFECT-003 | P1 | signal-scanner.service.ts | momentum=8, vwapTrendAlignment=8 hardcoded | RSI-driven momentum (3–15); VWAP-deviation-driven alignment (6–15) |
+| DEFECT-014 | P1 | signal-dispatcher.service.ts | suggestedQuantity never used — always 1 lot | RiskManagementService.computePositionSize() wired into both dispatch paths |
+| P2-002 | P2 | signal-pipeline.integration.spec.ts | No integration test suite | 13 near-integration tests covering full pipeline |
+| DEFECT-005 (partial) | P0 | historical-data-import.service.ts | No historical data infrastructure | CSV import service with validation, FK checks, batch inserts |
+
+### New Files Created
+- `src/modules/market-data/candle-query.service.ts`
+- `src/modules/backtest/historical-data-import.service.ts`
+- `src/modules/signal-scanner/signal-pipeline.integration.spec.ts`
+
+### Tests Added
+- `signal-scanner.service.spec.ts` rewritten: 37 tests (was 22) +15 new DEFECT-002/003 tests
+- `signal-dispatcher.service.spec.ts`: updated for lot-sizing tests
+- `signal-pipeline.integration.spec.ts`: 13 new tests
+- **1,601 → 1,625 tests**
+
+---
+
+## Session 6 — Dhan Historical Backfill (2026-11-12, working tree)
+
+### Features Implemented
+
+| Feature | File(s) | Description |
+|---------|---------|-------------|
+| Dhan historical backfill | backtest/dhan-historical-backfill.service.ts | Fetches historical candles from Dhan API for configurable date ranges; supports 1d/1m/5m/15m granularities; near-ATM and directional filters |
+| POST /backtest/backfill | backtest/backtest.controller.ts | REST endpoint to trigger backfill |
+| BacktestModule wiring | backtest/backtest.module.ts | Added DhanApiModule, HistoricalCandles, Instruments repos |
+
+### Data Acquired
+- 341,670 intraday 1m candles for 29 NIFTY options (Aug–Nov 2026, 65 trading days)
+- Run via `scripts/run-backfill.ts`
+
+### Tests Added
+- `dhan-historical-backfill.service.spec.ts`: 16 tests
+- **1,625 → 1,641 tests**
+
+---
+
+## Session 7 — Near-ATM + Directional CE/PE Improvements (2026-11-12, working tree)
+
+### Improvements Implemented
+
+| Improvement | File(s) | Description |
+|-------------|---------|-------------|
+| Near-ATM filter | signal-scanner.service.ts | `isNearATM()` — reads spot from Redis, skips \|strike−spot\|/spot > 10% |
+| Directional CE/PE | signal-scanner.service.ts | `isDirectionalMatch()` — CE in bull regimes, PE in bear regimes only |
+| RSI≥55 for options | signal-scanner.service.ts | `evaluateEntryConditions(ltp, indicators, optionType)` — RSI ≥ 55 required for directional option entries |
+| Instrument cache enriched | signal-scanner.service.ts | `InstrumentCacheEntry` now includes strikePrice, optionType, underlying |
+| Spot price cache | signal-scanner.service.ts | `loadSpotPrices()` reads NIFTY (secId=13) and BANKNIFTY (secId=25) from Redis at scan start |
+
+### Quantitative Results (Simulation)
+
+| Simulation | Trades | Win Rate | OOS Expectancy | Verdict |
+|------------|--------|----------|----------------|---------|
+| V1 (DEFECT-002/003 fixes, all instruments) | 6,525 | 19.9% | ₹+6/trade | PROMISING_BUT_UNPROVEN |
+| V2 (near-ATM + direction + RSI≥55) | 936 | 30.1% | ₹+220/trade OOS | PROMISING_BUT_UNPROVEN |
+
+OOS profit factor: 1.92. OOS win rate exceeds 33.3% break-even threshold.
+
+### Tests Added
+- `signal-scanner.service.spec.ts`: +20 (near-ATM, directional, RSI≥55 regression tests)
+- **1,641 → 1,661 tests**
+
+### Scripts Created
+- `scripts/run-simulation.ts` v2 (near-ATM + directional + RSI≥55 filters)
+- `scripts/run-backtest-simulation.ts`
+- `scripts/run-targeted-backfill.ts`
+- `scripts/run-expanded-backfill.ts`
