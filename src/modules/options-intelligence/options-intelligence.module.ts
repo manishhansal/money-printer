@@ -44,16 +44,21 @@
  */
 
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { DhanApiModule } from '../dhan/dhan-api.module';
+import { Instruments } from '../../database/entities/instruments.entity';
 import { OptionsIntelligenceService } from './options-intelligence.service';
 import { ContractSelectionService } from './contract-selection.service';
 import { IvRegimeService } from './iv-regime.service';
 import { ExpiryDayControlsService } from './expiry-day-controls.service';
 import { LiquidityMarkerService } from './liquidity-marker.service';
 import { ThetaDecayService } from './theta-decay.service';
+import { OptionsChainController } from './options-chain.controller';
 
 @Module({
   imports: [
+    // Provides Instruments repository for the OptionsChainController strike table.
+    TypeOrmModule.forFeature([Instruments]),
     // DhanApiModule exports DhanApiClient, which OptionsIntelligenceService
     // uses to call getOptionChain() for live Greeks data.
     DhanApiModule,
@@ -66,6 +71,7 @@ import { ThetaDecayService } from './theta-decay.service';
     LiquidityMarkerService,
     ThetaDecayService,
   ],
+  controllers: [OptionsChainController],
   exports: [
     OptionsIntelligenceService,
     ContractSelectionService,

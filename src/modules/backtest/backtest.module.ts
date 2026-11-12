@@ -8,17 +8,28 @@
  * bootstrap confidence intervals before permitting live deployment
  * (Requirements 15.1, 15.2, 15.4, 15.6).
  *
- * No external database or Redis dependencies are required: BacktestService
- * operates entirely on the trade arrays passed by the caller, keeping it
- * free of I/O side-effects and straightforwardly unit-testable.
+ * BacktestController exposes:
+ *   POST /backtest/run       — walk-forward backtest from provided trades
+ *   GET  /backtest/charges   — charge rates reference for cost-model validation
+ *   GET  /backtest/historical — fetch DB trades in BacktestTrade format for use
+ *                              with /backtest/run (Phase 9)
  */
 
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { BacktestService } from './backtest.service';
+import { BacktestController } from './backtest.controller';
 import { TradingChargesModule } from '../charges/trading-charges.module';
+import { Trade } from '../../database/entities/trades.entity';
+import { PaperTrade } from '../../database/entities/paper-trades.entity';
 
 @Module({
-  imports: [TradingChargesModule],
+  imports: [
+    TradingChargesModule,
+    // Trade + PaperTrade repositories for the GET /backtest/historical endpoint.
+    TypeOrmModule.forFeature([Trade, PaperTrade]),
+  ],
+  controllers: [BacktestController],
   providers: [BacktestService],
   exports: [BacktestService],
 })

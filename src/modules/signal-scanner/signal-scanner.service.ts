@@ -22,32 +22,26 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { OnEvent } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { RedisService } from '../redis/redis.service';
 import { MarketRegimeService } from '../market-regime/market-regime.service';
 import { SessionManagerService } from '../session-manager/session-manager.service';
 import { StrategyService } from '../strategy/strategy.service';
+import { SniperEntryService } from './sniper-entry.service';
 import { MarketRegime } from '../market-regime/market-regime.types';
 import { SessionPhase } from '../session-manager/session-manager.types';
 import { SignalCandidateInput } from '../strategy/strategy.types';
 import { SignalComponentScores } from '../signal-scoring/signal-scoring.types';
 import { Instruments } from '../../database/entities/instruments.entity';
 
-/** Minimum LTP to consider (filters zero-volume deep OTM options). */
-const MIN_LTP = 5;
-
-/** Maximum bid-ask spread as a fraction of LTP. */
-const MAX_SPREAD_RATIO = 0.2;
-
-/** Stop-loss distance as fraction of LTP (1.5%). */
+/** Default position size in lots. */
+const DEFAULT_POSITION_SIZE = 1;
 const SL_PCT = 0.015;
 
 /** Target distance as fraction of LTP (3.0%) → R:R = 2.0. */
 const TARGET_PCT = 0.03;
-
-/** Default position size in lots. */
-const DEFAULT_POSITION_SIZE = 1;
 
 /** Regime-to-regimeAlignment score (0–15). */
 const REGIME_SCORE: Record<string, number> = {
@@ -67,6 +61,7 @@ const SCANNABLE_PHASES = new Set<SessionPhase>([
   SessionPhase.MORNING_MOMENTUM,
   SessionPhase.MID_SESSION,
   SessionPhase.AFTERNOON,
+  SessionPhase.AFTERNOON_LATE, // 14:30–15:00 IST — entries still allowed
 ]);
 
 interface SnapshotData {
@@ -88,6 +83,7 @@ export class SignalScannerService {
     private readonly marketRegimeService: MarketRegimeService,
     private readonly sessionManagerService: SessionManagerService,
     private readonly strategyService: StrategyService,
+    private readonly sniperEntryService: SniperEntryService,
     @InjectRepository(Instruments)
     private readonly instrumentsRepo: Repository<Instruments>,
   ) {}
@@ -180,6 +176,57 @@ export class SignalScannerService {
     );
   }
 
+  // ─── On-demand scan (dashboard debug trigger) ──────────────────────────────
+
+  /**
+   * Fires when the dashboard calls GET /debug/scan.
+   * Runs a full scan immediately — bypasses the session phase guard so the
+   * operator can force a scan at any time (e.g. pre-market testing or
+   * manual trigger outside market hours).
+   */
+  @OnEvent('debug.trigger_scan')
+  async onDebugTriggerScan(): Promise<void> {
+    this.logger.log('[Scanner] On-demand scan triggered by dashboard — bypassing phase guard');
+    // Temporarily inject a fake snapshot if none exist so the scan can run.
+    const snapshotKeys = await this.redisService.keys('mkt:snapshot:*');
+
+    if (snapshotKeys.length === 0) {
+      this.logger.warn(
+        '[Scanner] No market snapshots — on-demand scan cannot evaluate any instruments',
+      );
+      return;
+    }
+
+    // Run the scan pipeline directly (copy of scanForSignals sans phase check).
+    const regime = this.marketRegimeService.getCurrentRegime();
+    const securityIds = snapshotKeys.map((k) => k.replace('mkt:snapshot:', ''));
+    await this.refreshInstrumentCache(securityIds);
+
+    if (this.securityIdToUuidCache.size === 0) {
+      this.logger.warn('[Scanner] No snapshot securityIds matched instruments in DB');
+      return;
+    }
+
+    let evaluated = 0;
+    for (const key of snapshotKeys) {
+      const securityId = key.replace('mkt:snapshot:', '');
+      const instrumentId = this.securityIdToUuidCache.get(securityId);
+      if (!instrumentId) continue;
+
+      const snapshot = await this.loadSnapshot(key);
+      if (!snapshot || !this.isEligible(snapshot)) continue;
+
+      const candidate = this.buildCandidate(instrumentId, securityId, snapshot, regime, false);
+      try {
+        await this.strategyService.evaluateSignalCandidate(candidate);
+        evaluated++;
+      } catch (err) {
+        this.logger.error(`[Scanner] evaluateSignalCandidate failed: ${(err as Error).message}`);
+      }
+    }
+    this.logger.log(`[Scanner] On-demand scan complete — evaluated=${evaluated}`);
+  }
+
   // ─── Private helpers ────────────────────────────────────────────────────────
 
   /**
@@ -230,16 +277,27 @@ export class SignalScannerService {
   }
 
   private isEligible(snapshot: SnapshotData): boolean {
-    if (snapshot.ltp < MIN_LTP) return false;
-    if (snapshot.bidPrice === null && snapshot.askPrice === null) return false;
+    // Build a MarketSnapshot-compatible object for SniperEntryService.
+    const marketSnapshot = {
+      ltp: String(snapshot.ltp),
+      bidPrice: snapshot.bidPrice !== null ? String(snapshot.bidPrice) : null,
+      askPrice: snapshot.askPrice !== null ? String(snapshot.askPrice) : null,
+      volume: String(snapshot.volume),
+      oi: null,
+      timestamp: Date.now(),
+    };
 
-    if (snapshot.bidPrice !== null && snapshot.askPrice !== null) {
-      const mid = (snapshot.bidPrice + snapshot.askPrice) / 2;
-      if (mid <= 0) return false;
-      const spreadRatio = (snapshot.askPrice - snapshot.bidPrice) / mid;
-      if (spreadRatio > MAX_SPREAD_RATIO) return false;
+    const result = this.sniperEntryService.evaluate({
+      snapshot: marketSnapshot,
+      direction: 'BUY', // default direction for eligibility pre-check
+    });
+
+    if (!result.eligible) {
+      this.logger.debug(
+        `[Scanner] Sniper filter rejected — ${result.primaryFailureReason ?? result.failingFilters.join(', ')}`,
+      );
+      return false;
     }
-
     return true;
   }
 

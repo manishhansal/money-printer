@@ -52,7 +52,9 @@ const mockDhanApiClient = {
   cancelOrder: jest.fn(),
   setPnlExit: jest.fn().mockResolvedValue({ pnlExitStatus: 'ACTIVE', message: 'ok' }),
   deletePnlExit: jest.fn().mockResolvedValue({ pnlExitStatus: 'DISABLED', message: 'ok' }),
-  setKillSwitch: jest.fn().mockResolvedValue({ dhanClientId: 'test', killSwitchStatus: 'ACTIVATE' }),
+  setKillSwitch: jest
+    .fn()
+    .mockResolvedValue({ dhanClientId: 'test', killSwitchStatus: 'ACTIVATE' }),
 };
 
 const mockTradeJournalService = {

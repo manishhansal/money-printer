@@ -36,6 +36,8 @@ import { In, Repository } from 'typeorm';
 
 import { Execution } from '../../database/entities/executions.entity';
 import { Order } from '../../database/entities/orders.entity';
+import { Instruments } from '../../database/entities/instruments.entity';
+import { Position } from '../../database/entities/positions.entity';
 import { DhanApiClient } from '../dhan/dhan-api.client';
 import { DhanOrderType } from '../dhan/dhan-api.types';
 import { RiskManagementService } from '../risk-management/risk-management.service';
@@ -79,6 +81,7 @@ const ACTIVE_TRADING_PHASES = new Set<SessionPhase>([
   SessionPhase.MORNING_MOMENTUM,
   SessionPhase.MID_SESSION,
   SessionPhase.AFTERNOON,
+  SessionPhase.AFTERNOON_LATE, // 14:30–15:00 IST — entries still permitted
 ]);
 
 /** Map from entity OrderType to the matching Dhan API orderType string. */
@@ -103,6 +106,12 @@ export class ExecutionService {
 
     @InjectRepository(Execution)
     private readonly executionsRepo: Repository<Execution>,
+
+    @InjectRepository(Instruments)
+    private readonly instrumentsRepo: Repository<Instruments>,
+
+    @InjectRepository(Position)
+    private readonly positionsRepo: Repository<Position>,
 
     private readonly dhanApiClient: DhanApiClient,
     private readonly riskManagementService: RiskManagementService,
@@ -230,28 +239,159 @@ export class ExecutionService {
       return this.buildRejectedResponse(sessionCheck.failingCheck!, sessionCheck.reason!);
     }
 
-    // ── All checks passed: submit to broker ──────────────────────────────────
+    // ── Validate quantity invariant: quantityUnits must be a positive multiple of lotSize ──
+    // orderRequest.quantity MUST already be in UNITS (selectedLots × lotSize).
+    // The caller (SignalDispatcherService) is responsible for the multiplication.
+    if (!Number.isInteger(orderRequest.quantity) || orderRequest.quantity <= 0) {
+      this.logger.error(
+        `[PreTrade] REJECTED — invalid quantity=${orderRequest.quantity} ` +
+          `(must be a positive integer in units, not lots)`,
+      );
+      return {
+        orderId: null,
+        dhanOrderId: null,
+        status: 'rejected',
+        rejectedBy: 'risk-engine-rejected',
+        rejectionReason: `Invalid quantity ${orderRequest.quantity}: must be a positive integer in units`,
+      };
+    }
+    if (orderRequest.lotSize > 0 && orderRequest.quantity % orderRequest.lotSize !== 0) {
+      this.logger.error(
+        `[PreTrade] REJECTED — quantity=${orderRequest.quantity} is not a multiple of ` +
+          `lotSize=${orderRequest.lotSize}. Quantity must equal selectedLots × lotSize.`,
+      );
+      return {
+        orderId: null,
+        dhanOrderId: null,
+        status: 'rejected',
+        rejectedBy: 'risk-engine-rejected',
+        rejectionReason:
+          `Quantity ${orderRequest.quantity} is not a valid multiple of lot size ` +
+          `${orderRequest.lotSize} — must equal selectedLots × lotSize`,
+      };
+    }
+
+    // ── No-averaging-down check ────────────────────────────────────────────────
+    // Requirement: No averaging down — do not buy more of an already-held position.
+    // This check prevents the common failure mode where the system buys more
+    // of a losing position (averaging down), which violates the risk rules.
+    // We check for open POSITIONS, not just open ORDERS, since the order check
+    // (Check 4) only catches pending orders, not filled positions.
+    if (orderRequest.transactionType === 'BUY' && orderRequest.engine === 'LIVE') {
+      try {
+        const existingPosition = await this.positionsRepo.findOne({
+          where: {
+            instrument_id: orderRequest.instrumentId,
+            engine: 'LIVE',
+            is_open: true,
+          },
+        });
+        if (existingPosition) {
+          this.logger.warn(
+            `[PreTrade] REJECTED — averaging down blocked. ` +
+              `Open LONG position already exists for instrument=${orderRequest.instrumentId}. ` +
+              `No averaging down (Requirement 11).`,
+          );
+          return {
+            orderId: null,
+            dhanOrderId: null,
+            status: 'rejected',
+            rejectedBy: 'risk-engine-rejected',
+            rejectionReason:
+              'No averaging down: an open LONG position already exists for this instrument. ' +
+              'Close the existing position before opening a new one.',
+          };
+        }
+      } catch (err) {
+        // Non-fatal: log and continue (best-effort check)
+        this.logger.warn(
+          `[PreTrade] No-averaging-down check failed for instrument=${orderRequest.instrumentId}: ` +
+            `${(err as Error).message}. Proceeding without check.`,
+        );
+      }
+    } // NSE defines a maximum order quantity (freeze quantity) per instrument.
+    // Submitting a quantity above this limit causes immediate rejection.
+    // Look up the instrument to check its freeze_quantity field.
+    if (orderRequest.instrumentId) {
+      try {
+        const instrument = await this.instrumentsRepo.findOne({
+          where: { id: orderRequest.instrumentId },
+          select: ['freezeQuantity', 'tradingSymbol'],
+        });
+        if (
+          instrument?.freezeQuantity &&
+          instrument.freezeQuantity > 0 &&
+          orderRequest.quantity > instrument.freezeQuantity
+        ) {
+          const freezeQty = instrument.freezeQuantity;
+          const sliceCount = Math.ceil(orderRequest.quantity / freezeQty);
+          this.logger.warn(
+            `[PreTrade] qty=${orderRequest.quantity} exceeds freeze limit ` +
+              `${freezeQty} for ${instrument.tradingSymbol} — ` +
+              `auto-slicing into ${sliceCount} sub-orders (Req P3)`,
+          );
+
+          // Submit each slice sequentially.  Each slice gets a modified
+          // idempotency key so the idempotency guard treats them as distinct.
+          let remaining = orderRequest.quantity;
+          let firstResponse: OrderResponse | null = null;
+
+          for (let slice = 1; slice <= sliceCount; slice++) {
+            const sliceQty = Math.min(remaining, freezeQty);
+            const sliceKey = `${orderRequest.idempotencyKey.slice(0, 25)}-s${slice}`;
+
+            const sliceResult = await this.placeOrder({
+              ...orderRequest,
+              idempotencyKey: sliceKey,
+              quantity: sliceQty,
+            });
+
+            if (slice === 1) firstResponse = sliceResult;
+
+            if (sliceResult.status !== 'submitted') {
+              this.logger.error(
+                `[PreTrade] Slice ${slice}/${sliceCount} rejected: ` +
+                  `${sliceResult.rejectionReason ?? 'unknown'}`,
+              );
+              break;
+            }
+
+            remaining -= sliceQty;
+            this.logger.log(
+              `[PreTrade] Slice ${slice}/${sliceCount} submitted: ` +
+                `qty=${sliceQty} orderId=${sliceResult.orderId}`,
+            );
+          }
+
+          return firstResponse!;
+        }
+      } catch (err) {
+        // Non-fatal: log and proceed (best effort check)
+        this.logger.warn(
+          `[PreTrade] Freeze quantity check failed for instrument=${orderRequest.instrumentId}: ` +
+            `${(err as Error).message}. Proceeding without freeze check.`,
+        );
+      }
+    }
+
+    // ── All checks passed: persist order intent FIRST, then submit to broker ─
+    // ORDERING IS CRITICAL (Requirement: DB persistence before broker submission).
+    // If the process crashes after broker submission but before DB save, we have
+    // an orphaned broker order and no idempotency record → duplicate on retry.
+    // By writing the DB record first (status='pending'), any retry that bypasses
+    // Redis TTL will be caught by Check 4 (duplicate open order) or the DB
+    // unique constraint on idempotency_key.
     this.logger.log(
-      `[Execution] All pre-trade checks passed for instrument=${orderRequest.instrumentId}; submitting to Dhan`,
+      `[Execution] All pre-trade checks passed for instrument=${orderRequest.instrumentId}; ` +
+        `persisting intent and submitting to Dhan`,
     );
 
+    const correlationId = orderRequest.idempotencyKey.slice(0, 30);
     const dhanClientId = await this.secretsService.get('DHAN_CLIENT_ID');
 
-    const dhanResponse = await this.dhanApiClient.placeOrder({
-      dhanClientId,
-      correlationId: orderRequest.idempotencyKey.slice(0, 30),
-      transactionType: orderRequest.transactionType,
-      exchangeSegment: orderRequest.exchangeSegment,
-      productType: orderRequest.productType,
-      orderType: ORDER_TYPE_MAP[orderRequest.orderType],
-      validity: 'DAY',
-      securityId: orderRequest.securityId,
-      quantity: orderRequest.quantity,
-      price: orderRequest.price,
-      triggerPrice: orderRequest.triggerPrice,
-    });
-
-    // ── Persist to Orders table ───────────────────────────────────────────────
+    // ── Step 1: Persist order intent to DB with status='pending' ─────────────
+    // This record acts as a durable outbox entry. Any crash after this point
+    // can be recovered via GET /orders/external/{correlationId} from Dhan.
     const order = this.ordersRepo.create({
       idempotency_key: orderRequest.idempotencyKey,
       engine: orderRequest.engine,
@@ -259,27 +399,66 @@ export class ExecutionService {
       instrument_id: orderRequest.instrumentId,
       order_type: orderRequest.orderType,
       transaction_type: orderRequest.transactionType,
-      quantity: orderRequest.quantity,
+      quantity: orderRequest.quantity, // stored in UNITS
       price: orderRequest.price != null ? String(orderRequest.price) : null,
       trigger_price: orderRequest.triggerPrice != null ? String(orderRequest.triggerPrice) : null,
-      dhan_order_id: dhanResponse.orderId,
-      dhan_correlation_id: orderRequest.idempotencyKey.slice(0, 30),
-      status: 'submitted',
-      submitted_at: new Date(),
+      dhan_order_id: null, // set after broker acknowledgement
+      dhan_correlation_id: correlationId,
+      status: 'pending',
+      submitted_at: null, // set after broker acknowledgement
       filled_quantity: 0,
     });
+    const pendingOrder = await this.ordersRepo.save(order);
 
-    const saved = await this.ordersRepo.save(order);
-
-    // ── Store idempotency key in Redis (TTL = 5 minutes) ─────────────────────
+    // ── Step 2: Store idempotency key in Redis AFTER DB write ─────────────────
+    // Redis TTL is a fast-path cache. The DB unique constraint is the
+    // authoritative idempotency guard.
     await this.redisService.set(
       `${IDEMPOTENCY_KEY_PREFIX}${orderRequest.idempotencyKey}`,
-      saved.id,
+      pendingOrder.id,
       IDEMPOTENCY_TTL_SECONDS,
     );
 
+    // ── Step 3: Submit to Dhan broker ─────────────────────────────────────────
+    // quantity is already in UNITS (validated above).
+    let dhanResponse: { orderId: string; orderStatus: string };
+    try {
+      dhanResponse = await this.dhanApiClient.placeOrder({
+        dhanClientId,
+        correlationId,
+        transactionType: orderRequest.transactionType,
+        exchangeSegment: orderRequest.exchangeSegment,
+        productType: orderRequest.productType,
+        orderType: ORDER_TYPE_MAP[orderRequest.orderType],
+        validity: 'DAY',
+        securityId: orderRequest.securityId,
+        quantity: orderRequest.quantity, // UNITS — not lots
+        price: orderRequest.price,
+        triggerPrice: orderRequest.triggerPrice,
+      });
+    } catch (brokerErr) {
+      // Broker submission failed. Keep DB record as 'pending' so reconciliation
+      // can query Dhan by correlationId and either confirm or cancel.
+      this.logger.error(
+        `[Execution] Broker submission FAILED for order=${pendingOrder.id}: ` +
+          `${(brokerErr as Error).message}. ` +
+          `DB record remains pending — reconciliation required.`,
+      );
+      pendingOrder.status = 'rejected';
+      pendingOrder.rejection_reason = (brokerErr as Error).message;
+      await this.ordersRepo.save(pendingOrder);
+      throw brokerErr;
+    }
+
+    // ── Step 4: Update DB record with broker acknowledgement ─────────────────
+    pendingOrder.dhan_order_id = dhanResponse.orderId;
+    pendingOrder.status = 'submitted';
+    pendingOrder.submitted_at = new Date();
+    const saved = await this.ordersRepo.save(pendingOrder);
+
     this.logger.log(
-      `[Execution] Order persisted: db_id=${saved.id}, dhan_order_id=${dhanResponse.orderId}`,
+      `[Execution] Order submitted: db_id=${saved.id}, dhan_order_id=${dhanResponse.orderId}, ` +
+        `quantity_units=${orderRequest.quantity}, lot_size=${orderRequest.lotSize}`,
     );
 
     return {

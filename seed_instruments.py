@@ -106,7 +106,21 @@ def build_rows():
 
             expiry = parse_date(expiry_raw)
             strike = parse_float(strike_raw)
-            lot_size = int(float(lot_size_raw)) if lot_size_raw else 1
+
+            # CRITICAL: reject instruments with no valid lot_size.
+            # Defaulting to 1 would cause quantity calculation bugs (P0-CRIT-003).
+            if not lot_size_raw or lot_size_raw.strip() == '':
+                print(f"  WARN: skipping {security_id} — missing SEM_LOT_UNITS")
+                continue
+            try:
+                lot_size = int(float(lot_size_raw.strip()))
+            except (ValueError, TypeError):
+                print(f"  WARN: skipping {security_id} — invalid SEM_LOT_UNITS: {lot_size_raw!r}")
+                continue
+            if lot_size <= 0:
+                print(f"  WARN: skipping {security_id} — lot_size={lot_size} is not positive")
+                continue
+
             tick_size = parse_float(tick_size_raw, 0.05)
 
             # Map option type
@@ -166,7 +180,21 @@ def insert_batch(rows, batch_size=500):
             "expiry_date, strike_price, option_type, lot_size, tick_size, "
             "is_active, is_tradable, liquidity_score, created_at, updated_at) VALUES\n"
             + ',\n'.join(values) +
-            "\nON CONFLICT (security_id) DO NOTHING;"
+            # Full UPSERT: update all mutable fields so stale lot_size / tick_size are corrected.
+            # Requirement P0-CRIT-004: ON CONFLICT DO NOTHING silently preserves stale metadata.
+            "\nON CONFLICT (security_id) DO UPDATE SET"
+            "\n  trading_symbol  = EXCLUDED.trading_symbol,"
+            "\n  instrument_type = EXCLUDED.instrument_type,"
+            "\n  underlying      = EXCLUDED.underlying,"
+            "\n  expiry_date     = EXCLUDED.expiry_date,"
+            "\n  strike_price    = EXCLUDED.strike_price,"
+            "\n  option_type     = EXCLUDED.option_type,"
+            "\n  lot_size        = EXCLUDED.lot_size,"
+            "\n  tick_size       = EXCLUDED.tick_size,"
+            "\n  updated_at      = NOW()"
+            "\n  WHERE instruments.lot_size <> EXCLUDED.lot_size"
+            "\n     OR instruments.tick_size <> EXCLUDED.tick_size"
+            "\n     OR instruments.trading_symbol <> EXCLUDED.trading_symbol;"
         )
 
         result = subprocess.run(

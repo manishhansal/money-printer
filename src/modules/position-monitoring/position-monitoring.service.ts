@@ -43,6 +43,7 @@ import {
   PositionExitSignal,
 } from './position-monitoring.types';
 import { GreedyTrailService } from './greedy-trail.service';
+import { TargetAndRunnerService } from './target-and-runner.service';
 
 /** Mechanism name used to flag a position for greedy partial-profit trailing. */
 const PARTIAL_PROFIT_MECHANISM = 'PARTIAL_PROFIT';
@@ -111,6 +112,7 @@ export class PositionMonitoringService implements OnModuleInit {
     private readonly redisService: RedisService,
     private readonly eventEmitter: EventEmitter2,
     private readonly greedyTrailService: GreedyTrailService,
+    private readonly targetAndRunnerService: TargetAndRunnerService,
   ) {}
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -352,6 +354,35 @@ export class PositionMonitoringService implements OnModuleInit {
    */
   getTrackedPositionIds(): string[] {
     return Array.from(this.positionToInstrument.keys());
+  }
+
+  /**
+   * Evaluate a position's current phase and recommend an action using the
+   * TargetAndRunnerService (lot-aware runner mode, break-even SL, etc.).
+   *
+   * Called externally (e.g. by a strategy layer or execution handler) when
+   * a target is hit and the caller needs a lot-aware exit/runner recommendation.
+   *
+   * @param position    Current position state.
+   * @param currentPrice Current LTP of the instrument.
+   */
+  async evaluateRunnerDecision(
+    position: {
+      positionId: string;
+      direction: 'LONG' | 'SHORT';
+      entryPrice: string;
+      currentStopLoss: string;
+      target1Price: string;
+      quantityUnits: number;
+      lotSize: number;
+      instrumentId: string;
+      entryVolume: number;
+      atr: number;
+      currentPhase: import('./target-and-runner.service').TradePhase;
+    },
+    currentPrice: number,
+  ) {
+    return this.targetAndRunnerService.evaluatePosition(position, currentPrice);
   }
 
   /**

@@ -1,154 +1,317 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class CreateFullSchema1794321588593 implements MigrationInterface {
-    name = 'CreateFullSchema1794321588593'
+  name = 'CreateFullSchema1794321588593';
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`CREATE TABLE "user_settings" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "user_id" character varying NOT NULL, "theme" character varying NOT NULL DEFAULT 'dark', "default_risk_percentage" numeric(5,4) NOT NULL DEFAULT '1.0000', "max_daily_loss_percentage" numeric(5,4) NOT NULL DEFAULT '2.0000', "paper_starting_capital" numeric(15,2) NOT NULL DEFAULT '100000.00', "live_starting_capital" numeric(15,2) NOT NULL DEFAULT '0.00', "notifications_enabled" boolean NOT NULL DEFAULT true, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "UQ_4ed056b9344e6f7d8d46ec4b302" UNIQUE ("user_id"), CONSTRAINT "PK_00f004f5922a0744d174530d639" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE TABLE "positions" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "engine" character varying(10) NOT NULL, "instrument_id" uuid NOT NULL, "signal_id" uuid, "direction" character varying(5) NOT NULL, "quantity" integer NOT NULL, "average_entry_price" numeric(12,2) NOT NULL, "current_sl" numeric(12,2), "target_price" numeric(12,2), "trailing_stop_mechanism" character varying, "unrealized_pnl" numeric(15,2) NOT NULL DEFAULT '0', "mfe" numeric(15,2) NOT NULL DEFAULT '0', "mae" numeric(15,2) NOT NULL DEFAULT '0', "opened_at" TIMESTAMP WITH TIME ZONE NOT NULL, "closed_at" TIMESTAMP WITH TIME ZONE, "is_open" boolean NOT NULL DEFAULT true, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_17e4e62ccd5749b289ae3fae6f3" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "idx_positions_instrument_is_open" ON "positions" ("instrument_id", "is_open") `);
-        await queryRunner.query(`CREATE INDEX "idx_positions_engine_is_open" ON "positions" ("engine", "is_open") `);
-        await queryRunner.query(`CREATE TABLE "trades" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "engine" character varying(10) NOT NULL, "position_id" uuid NOT NULL, "instrument_id" uuid NOT NULL, "strategy_id" uuid NOT NULL, "signal_id" uuid, "direction" character varying(5) NOT NULL, "quantity" integer NOT NULL, "lot_size" integer NOT NULL, "entry_price" numeric(12,2) NOT NULL, "exit_price" numeric(12,2) NOT NULL, "entry_time" TIMESTAMP WITH TIME ZONE NOT NULL, "exit_time" TIMESTAMP WITH TIME ZONE NOT NULL, "mfe" numeric(15,2) NOT NULL, "mae" numeric(15,2) NOT NULL, "gross_pnl" numeric(15,2) NOT NULL, "brokerage" numeric(10,4) NOT NULL, "stt" numeric(10,4) NOT NULL, "exchange_charges" numeric(10,4) NOT NULL, "gst" numeric(10,4) NOT NULL, "sebi_charges" numeric(10,4) NOT NULL, "stamp_duty" numeric(10,4) NOT NULL, "net_pnl" numeric(15,2) NOT NULL, "exit_reason" character varying NOT NULL, "execution_slippage" numeric(10,4) NOT NULL, "signal_score" numeric(5,2), "dhan_entry_order_id" character varying, "dhan_exit_order_id" character varying, "qcr" numeric(8,4), "exit_classification" character varying, "execution_quality" character varying, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_c6d7c36a837411ba5194dc58595" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "idx_trades_strategy_engine_entry_time" ON "trades" ("strategy_id", "engine", "entry_time") `);
-        await queryRunner.query(`CREATE INDEX "idx_trades_engine_entry_time" ON "trades" ("engine", "entry_time") `);
-        await queryRunner.query(`CREATE TABLE "system_health_events" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "event_type" character varying NOT NULL, "module_name" character varying NOT NULL, "severity" character varying(10) NOT NULL, "message" text NOT NULL, "metadata" jsonb, "timestamp" TIMESTAMP WITH TIME ZONE NOT NULL, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_cb366d95a4c7a97f447848b36b2" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "idx_system_health_events_severity_timestamp" ON "system_health_events" ("severity", "timestamp") `);
-        await queryRunner.query(`CREATE INDEX "idx_system_health_events_module_timestamp" ON "system_health_events" ("module_name", "timestamp") `);
-        await queryRunner.query(`CREATE TABLE "strategies" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "code" character varying NOT NULL, "name" character varying NOT NULL, "is_active" boolean NOT NULL DEFAULT true, "is_suspended" boolean NOT NULL DEFAULT false, "compatible_regimes" text array NOT NULL, "min_rr_ratio" numeric(4,2) NOT NULL, "max_concurrent_positions" integer NOT NULL, "opening_phase_compatible" boolean NOT NULL DEFAULT false, "min_performance_threshold" numeric(5,2), "current_oos_win_rate" numeric(5,2), "price_deviation_threshold" numeric(6,4), "max_validity_duration_seconds" integer, "suspension_reason" character varying, "failing_gate_value" numeric(15,6), "version" integer NOT NULL DEFAULT '1', "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "UQ_fae2c5d1aa5b57a7dd2c455f05e" UNIQUE ("code"), CONSTRAINT "PK_9a0d363ddf5b40d080147363238" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE TABLE "strategy_versions" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "version" integer NOT NULL, "config_snapshot" jsonb NOT NULL, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "strategy_id" uuid NOT NULL, CONSTRAINT "uq_strategy_versions_strategy_version" UNIQUE ("strategy_id", "version"), CONSTRAINT "PK_a19b89b1ed4165f595cd889f86f" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE TABLE "strategy_performance" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "strategy_id" uuid NOT NULL, "engine" character varying(10) NOT NULL, "regime" character varying(50), "trading_date" date NOT NULL, "trades_count" integer NOT NULL DEFAULT '0', "win_count" integer NOT NULL DEFAULT '0', "loss_count" integer NOT NULL DEFAULT '0', "total_net_pnl" numeric(15,2) NOT NULL DEFAULT '0.00', "selection_rationale" text, "oos_win_rate" numeric(5,2), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_e3a830e9e7c64234e09423091fd" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "idx_strategy_performance_strategy_engine_date" ON "strategy_performance" ("strategy_id", "engine", "trading_date") `);
-        await queryRunner.query(`CREATE TABLE "signals" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "instrument_id" uuid NOT NULL, "engine" character varying NOT NULL, "direction" character varying NOT NULL, "entry_price" numeric(12,2) NOT NULL, "stop_loss_price" numeric(12,2) NOT NULL, "target_price" numeric(12,2) NOT NULL, "position_size" integer NOT NULL, "composite_score" numeric(5,2) NOT NULL, "score_regime_alignment" numeric(4,2) NOT NULL, "score_price_structure" numeric(4,2) NOT NULL, "score_volume_confirmation" numeric(4,2) NOT NULL, "score_momentum" numeric(4,2) NOT NULL, "score_vwap_trend" numeric(4,2) NOT NULL, "score_options_futures" numeric(4,2) NOT NULL, "score_liquidity_execution" numeric(4,2) NOT NULL, "score_rr_quality" numeric(4,2) NOT NULL, "measured_inputs" jsonb NOT NULL, "status" character varying NOT NULL, "rejection_reason" character varying, "signal_timestamp" TIMESTAMP WITH TIME ZONE NOT NULL, "expiry_timestamp" TIMESTAMP WITH TIME ZONE, "dhan_order_id" character varying, "regime" character varying, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "strategy_id" uuid NOT NULL, CONSTRAINT "PK_04eeac09c09b65bc55c628c101d" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "idx_signals_engine_status_ts" ON "signals" ("engine", "status", "signal_timestamp") `);
-        await queryRunner.query(`CREATE INDEX "idx_signals_instrument_status_ts" ON "signals" ("instrument_id", "status", "signal_timestamp") `);
-        await queryRunner.query(`CREATE TABLE "signal_evaluations" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "instrument_id" uuid NOT NULL, "evaluated_at" TIMESTAMP WITH TIME ZONE NOT NULL, "produced_signal" boolean NOT NULL, "skip_reason" character varying, "regime_at_evaluation" character varying, "strategy_id" uuid NOT NULL, "signal_id" uuid, CONSTRAINT "PK_6ac28f8d38205bfd780597edc73" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "idx_signal_evaluations_strategy_evaluated_at" ON "signal_evaluations" ("strategy_id", "evaluated_at") `);
-        await queryRunner.query(`CREATE TABLE "risk_events" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "engine" character varying(10) NOT NULL, "event_type" character varying(30) NOT NULL, "reason" text NOT NULL, "triggering_metric_name" character varying(100), "triggering_metric_value" numeric(15,4), "threshold_value" numeric(15,4), "affected_instrument_id" uuid, "affected_strategy_id" uuid, "initiating_actor" character varying(100) NOT NULL, "occurred_at" TIMESTAMP WITH TIME ZONE NOT NULL, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_f05a2fd43548e862b7b5c489f44" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "idx_risk_events_engine_event_type_occurred_at" ON "risk_events" ("engine", "event_type", "occurred_at") `);
-        await queryRunner.query(`CREATE TABLE "paper_trades" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "engine" character varying(10) NOT NULL DEFAULT 'PAPER', "position_id" uuid NOT NULL, "instrument_id" uuid NOT NULL, "strategy_id" uuid, "signal_id" uuid, "direction" character varying(5) NOT NULL, "quantity" integer NOT NULL, "lot_size" integer NOT NULL DEFAULT '1', "entry_price" numeric(12,2) NOT NULL, "exit_price" numeric(12,2) NOT NULL, "entry_time" TIMESTAMP WITH TIME ZONE NOT NULL, "exit_time" TIMESTAMP WITH TIME ZONE NOT NULL, "mfe" numeric(15,2) NOT NULL DEFAULT '0', "mae" numeric(15,2) NOT NULL DEFAULT '0', "gross_pnl" numeric(15,2) NOT NULL, "brokerage" numeric(10,4) NOT NULL, "stt" numeric(10,4) NOT NULL, "exchange_charges" numeric(10,4) NOT NULL, "gst" numeric(10,4) NOT NULL, "sebi_charges" numeric(10,4) NOT NULL, "stamp_duty" numeric(10,4) NOT NULL, "net_pnl" numeric(15,2) NOT NULL, "exit_reason" character varying NOT NULL, "execution_slippage" numeric(10,4) NOT NULL DEFAULT '0', "signal_score" numeric(5,2), "dhan_entry_order_id" character varying, "dhan_exit_order_id" character varying, "qcr" numeric(8,4), "exit_classification" character varying, "execution_quality" character varying, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_5a569a3797709ab0d6128583705" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "idx_paper_trades_strategy_entry_time" ON "paper_trades" ("strategy_id", "entry_time") `);
-        await queryRunner.query(`CREATE INDEX "idx_paper_trades_entry_time" ON "paper_trades" ("entry_time") `);
-        await queryRunner.query(`CREATE TABLE "paper_positions" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "engine" character varying(10) NOT NULL DEFAULT 'PAPER', "instrument_id" uuid NOT NULL, "signal_id" uuid, "direction" character varying(5) NOT NULL, "quantity" integer NOT NULL, "average_entry_price" numeric(12,2) NOT NULL, "current_sl" numeric(12,2), "target_price" numeric(12,2), "trailing_stop_mechanism" character varying, "unrealized_pnl" numeric(15,2) NOT NULL DEFAULT '0', "mfe" numeric(15,2) NOT NULL DEFAULT '0', "mae" numeric(15,2) NOT NULL DEFAULT '0', "opened_at" TIMESTAMP WITH TIME ZONE NOT NULL, "closed_at" TIMESTAMP WITH TIME ZONE, "is_open" boolean NOT NULL DEFAULT true, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_72380f1ca0db030210595ff7724" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "idx_paper_positions_instrument_is_open" ON "paper_positions" ("instrument_id", "is_open") `);
-        await queryRunner.query(`CREATE INDEX "idx_paper_positions_is_open" ON "paper_positions" ("is_open") `);
-        await queryRunner.query(`CREATE TABLE "paper_executions" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "order_id" uuid NOT NULL, "engine" character varying(10) NOT NULL DEFAULT 'PAPER', "dhan_trade_id" character varying, "fill_price" numeric(12,2) NOT NULL, "fill_quantity" integer NOT NULL, "fill_timestamp" TIMESTAMP WITH TIME ZONE NOT NULL, "slippage" numeric(10,4), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_4b4c708f368547d635471096506" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "idx_paper_executions_order_id" ON "paper_executions" ("order_id") `);
-        await queryRunner.query(`CREATE TABLE "paper_orders" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "idempotency_key" character varying(100) NOT NULL, "engine" character varying(10) NOT NULL DEFAULT 'PAPER', "signal_id" uuid, "instrument_id" uuid NOT NULL, "order_type" character varying(10) NOT NULL, "transaction_type" character varying(4) NOT NULL, "quantity" integer NOT NULL, "price" numeric(12,2), "trigger_price" numeric(12,2), "dhan_order_id" character varying, "dhan_correlation_id" character varying, "status" character varying(20) NOT NULL, "rejection_reason" text, "submitted_at" TIMESTAMP WITH TIME ZONE, "filled_quantity" integer NOT NULL DEFAULT '0', "average_fill_price" numeric(12,2), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "UQ_cb3ad591782851d0aed1dde93f4" UNIQUE ("idempotency_key"), CONSTRAINT "PK_34a4dea4cb983e60268bd068194" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "idx_paper_orders_created_at" ON "paper_orders" ("created_at") `);
-        await queryRunner.query(`CREATE INDEX "idx_paper_orders_instrument_status" ON "paper_orders" ("instrument_id", "status") `);
-        await queryRunner.query(`CREATE TABLE "executions" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "order_id" uuid NOT NULL, "engine" character varying(10) NOT NULL, "dhan_trade_id" character varying, "fill_price" numeric(12,2) NOT NULL, "fill_quantity" integer NOT NULL, "fill_timestamp" TIMESTAMP WITH TIME ZONE NOT NULL, "slippage" numeric(10,4), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_703e64e0ef651986191844b7b8b" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "idx_executions_order_id" ON "executions" ("order_id") `);
-        await queryRunner.query(`CREATE TABLE "orders" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "idempotency_key" character varying(100) NOT NULL, "engine" character varying(10) NOT NULL, "signal_id" uuid, "instrument_id" uuid NOT NULL, "order_type" character varying(10) NOT NULL, "transaction_type" character varying(4) NOT NULL, "quantity" integer NOT NULL, "price" numeric(12,2), "trigger_price" numeric(12,2), "dhan_order_id" character varying, "dhan_correlation_id" character varying, "status" character varying(20) NOT NULL, "rejection_reason" text, "submitted_at" TIMESTAMP WITH TIME ZONE, "filled_quantity" integer NOT NULL DEFAULT '0', "average_fill_price" numeric(12,2), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "UQ_59d6b7756aeb6cbb43a093d15a1" UNIQUE ("idempotency_key"), CONSTRAINT "PK_710e2d4957aa5878dfe94e4ac2f" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "idx_orders_engine_created_at" ON "orders" ("engine", "created_at") `);
-        await queryRunner.query(`CREATE INDEX "idx_orders_instrument_status" ON "orders" ("instrument_id", "status") `);
-        await queryRunner.query(`CREATE TABLE "option_chain_snapshots" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "underlying" character varying NOT NULL, "expiry_date" date NOT NULL, "snapshot_at" TIMESTAMP WITH TIME ZONE NOT NULL, "chain_data" jsonb NOT NULL, "total_call_oi" bigint, "total_put_oi" bigint, "pcr" numeric(8,4), "iv_atm" numeric(8,4), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_e3fe92f2381215020a2f91a3cba" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "IDX_option_chain_snapshots_underlying_expiry_snapshot_at" ON "option_chain_snapshots" ("underlying", "expiry_date", "snapshot_at") `);
-        await queryRunner.query(`CREATE TABLE "model_versions" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "model_name" character varying(100) NOT NULL, "version" integer NOT NULL, "state" character varying(20) NOT NULL, "training_dataset_ref" character varying(500), "feature_definitions" jsonb, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_77c0256872dcc26394dba4b87ec" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE TABLE "model_evaluations" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "model_version_id" uuid NOT NULL, "evaluated_at" TIMESTAMP WITH TIME ZONE NOT NULL, "validation_type" character varying(20) NOT NULL, "expectancy" numeric(10,4), "win_rate" numeric(5,2), "max_drawdown" numeric(8,4), "passed_all_gates" boolean NOT NULL, "failure_reason" text, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_73dbe986e745a79bdaefae25c9e" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "idx_model_evaluations_model_version_id" ON "model_evaluations" ("model_version_id") `);
-        await queryRunner.query(`CREATE TABLE "market_snapshots" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "instrument_id" uuid NOT NULL, "ltp" numeric(12,2) NOT NULL, "open_price" numeric(12,2) NOT NULL, "high_price" numeric(12,2) NOT NULL, "low_price" numeric(12,2) NOT NULL, "close_price" numeric(12,2) NOT NULL, "volume" bigint NOT NULL, "oi" bigint, "bid_price" numeric(12,2), "ask_price" numeric(12,2), "bid_qty" integer, "ask_qty" integer, "snapshot_at" TIMESTAMP WITH TIME ZONE NOT NULL, CONSTRAINT "PK_fda8554552bb9c9898c5a9bedd4" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "IDX_market_snapshots_instrument_snapshot_at" ON "market_snapshots" ("instrument_id", "snapshot_at") `);
-        await queryRunner.query(`CREATE TABLE "market_regimes" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "regime" character varying NOT NULL, "classified_at" TIMESTAMP WITH TIME ZONE NOT NULL, "nifty_trend" character varying NOT NULL, "banknifty_trend" character varying NOT NULL, "market_breadth" numeric(5,2) NOT NULL, "advance_decline_ratio" numeric(8,4) NOT NULL, "vwap_deviation" numeric(8,4) NOT NULL, "india_vix" numeric(6,2) NOT NULL, "atr" numeric(10,4) NOT NULL, "relative_volume" numeric(8,4) NOT NULL, "sector_strength" numeric(5,2), "futures_basis" numeric(8,4), "classification_rationale" text, CONSTRAINT "PK_383f12f0b2567fb723d5fcb73ea" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "idx_market_regimes_classified_at" ON "market_regimes" ("classified_at") `);
-        await queryRunner.query(`CREATE TABLE "instruments" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "security_id" character varying NOT NULL, "trading_symbol" character varying NOT NULL, "exchange" character varying NOT NULL, "segment" character varying NOT NULL, "instrument_type" character varying NOT NULL, "underlying" character varying NOT NULL, "expiry_date" date, "strike_price" numeric(10,2), "option_type" character varying, "lot_size" integer NOT NULL, "tick_size" numeric(10,4) NOT NULL, "freeze_quantity" integer, "open_interest" integer DEFAULT '0', "avg_daily_volume" integer DEFAULT '0', "is_active" boolean NOT NULL DEFAULT true, "liquidity_score" numeric(5,2) NOT NULL DEFAULT '0.00', "is_tradable" boolean NOT NULL DEFAULT false, "last_scanned_at" TIMESTAMP WITH TIME ZONE, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "UQ_168587346ba0a840cead05a9c2b" UNIQUE ("security_id"), CONSTRAINT "PK_44d772c3199b38559c5fb666eb6" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "idx_instruments_is_active_liquidity_score" ON "instruments" ("is_active", "liquidity_score") `);
-        await queryRunner.query(`CREATE INDEX "idx_instruments_underlying_expiry_option_type" ON "instruments" ("underlying", "expiry_date", "option_type") `);
-        await queryRunner.query(`CREATE TABLE "historical_candles" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "instrument_id" uuid NOT NULL, "granularity" character varying(4) NOT NULL, "open_price" numeric(12,2) NOT NULL, "high_price" numeric(12,2) NOT NULL, "low_price" numeric(12,2) NOT NULL, "close_price" numeric(12,2) NOT NULL, "volume" bigint NOT NULL, "oi" bigint, "timestamp" TIMESTAMP WITH TIME ZONE NOT NULL, CONSTRAINT "UQ_historical_candles_instrument_granularity_timestamp" UNIQUE ("instrument_id", "granularity", "timestamp"), CONSTRAINT "PK_2b7d98542f136b945c883e75607" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "IDX_historical_candles_instrument_granularity_timestamp" ON "historical_candles" ("instrument_id", "granularity", "timestamp") `);
-        await queryRunner.query(`CREATE TABLE "daily_trading_summaries" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "trading_date" date NOT NULL, "engine" character varying(10) NOT NULL, "total_trades" integer NOT NULL DEFAULT '0', "winning_trades" integer NOT NULL DEFAULT '0', "losing_trades" integer NOT NULL DEFAULT '0', "gross_pnl" numeric(15,2) NOT NULL DEFAULT '0.00', "total_charges" numeric(15,2) NOT NULL DEFAULT '0.00', "net_pnl" numeric(15,2) NOT NULL DEFAULT '0.00', "closing_capital" numeric(15,2), "two_loss_lockout_triggered" boolean NOT NULL DEFAULT false, "emergency_halt_triggered" boolean NOT NULL DEFAULT false, "kill_switch_activated" boolean NOT NULL DEFAULT false, "no_trade_reason" text, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "uq_daily_trading_summaries_date_engine" UNIQUE ("trading_date", "engine"), CONSTRAINT "PK_438d6c567a2213e52699d2c205a" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE TABLE "capital_ledgers" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "engine" character varying(10) NOT NULL, "event_type" character varying(30) NOT NULL, "trade_id" uuid, "amount" numeric(15,2) NOT NULL, "balance_before" numeric(15,2) NOT NULL, "balance_after" numeric(15,2) NOT NULL, "description" character varying(500), "occurred_at" TIMESTAMP WITH TIME ZONE NOT NULL, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_11aaef3c75efaf31d63a452a2d3" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "idx_capital_ledgers_engine_occurred_at" ON "capital_ledgers" ("engine", "occurred_at") `);
-        await queryRunner.query(`CREATE TABLE "broker_accounts" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "user_id" character varying NOT NULL, "broker" character varying NOT NULL DEFAULT 'DHAN', "client_id" character varying NOT NULL, "api_key" character varying NOT NULL, "access_token" character varying NOT NULL, "is_active" boolean NOT NULL DEFAULT false, "static_ip" character varying, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_2e5ca0caf331244f0f855ab3215" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "IDX_3a6679892983997e5806dfa72c" ON "broker_accounts" ("user_id", "broker") `);
-        await queryRunner.query(`CREATE TABLE "broker_sessions" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "broker_account_id" uuid NOT NULL, "session_token" character varying NOT NULL, "expires_at" TIMESTAMP WITH TIME ZONE NOT NULL, "is_active" boolean NOT NULL DEFAULT true, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_f0fce68c933fa975d8433e65dbf" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "IDX_2d923e63326e158aab621a2675" ON "broker_sessions" ("broker_account_id", "is_active") `);
-        await queryRunner.query(`CREATE TABLE "audit_logs" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "user_id" character varying, "event_type" character varying NOT NULL, "entity_type" character varying, "entity_id" uuid, "field_name" character varying, "previous_value" character varying, "new_value" character varying, "ip_address" character varying, "metadata" jsonb, "outcome" character varying(10) NOT NULL, "timestamp" TIMESTAMP WITH TIME ZONE NOT NULL, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_1bb179d048bbc581caa3b013439" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "idx_audit_logs_event_type_timestamp" ON "audit_logs" ("event_type", "timestamp") `);
-        await queryRunner.query(`CREATE INDEX "idx_audit_logs_user_timestamp" ON "audit_logs" ("user_id", "timestamp") `);
-        await queryRunner.query(`ALTER TABLE "trades" ADD CONSTRAINT "FK_b846c59accf5f6e664f6069899c" FOREIGN KEY ("position_id") REFERENCES "positions"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "strategy_versions" ADD CONSTRAINT "FK_537595ab6aef33cba842807ea8c" FOREIGN KEY ("strategy_id") REFERENCES "strategies"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "signals" ADD CONSTRAINT "FK_9ec1d3272c715761109633b145f" FOREIGN KEY ("strategy_id") REFERENCES "strategies"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "signal_evaluations" ADD CONSTRAINT "FK_441a2b0285132226c6b8c45b375" FOREIGN KEY ("strategy_id") REFERENCES "strategies"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "signal_evaluations" ADD CONSTRAINT "FK_3bfa88cffe5d322273b5f6fe6ed" FOREIGN KEY ("signal_id") REFERENCES "signals"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "paper_trades" ADD CONSTRAINT "FK_36125ed6072e149535b53b3f2d8" FOREIGN KEY ("position_id") REFERENCES "paper_positions"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "paper_executions" ADD CONSTRAINT "FK_ccc91b735f869d41ec969b0dc25" FOREIGN KEY ("order_id") REFERENCES "paper_orders"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "executions" ADD CONSTRAINT "FK_f1e4217a13c5213290439948f69" FOREIGN KEY ("order_id") REFERENCES "orders"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "model_evaluations" ADD CONSTRAINT "FK_b2235e0e519c6183b7150525745" FOREIGN KEY ("model_version_id") REFERENCES "model_versions"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "broker_sessions" ADD CONSTRAINT "FK_64394105db333c34d659a1f8919" FOREIGN KEY ("broker_account_id") REFERENCES "broker_accounts"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
-    }
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `CREATE TABLE "user_settings" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "user_id" character varying NOT NULL, "theme" character varying NOT NULL DEFAULT 'dark', "default_risk_percentage" numeric(5,4) NOT NULL DEFAULT '1.0000', "max_daily_loss_percentage" numeric(5,4) NOT NULL DEFAULT '2.0000', "paper_starting_capital" numeric(15,2) NOT NULL DEFAULT '100000.00', "live_starting_capital" numeric(15,2) NOT NULL DEFAULT '0.00', "notifications_enabled" boolean NOT NULL DEFAULT true, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "UQ_4ed056b9344e6f7d8d46ec4b302" UNIQUE ("user_id"), CONSTRAINT "PK_00f004f5922a0744d174530d639" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "positions" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "engine" character varying(10) NOT NULL, "instrument_id" uuid NOT NULL, "signal_id" uuid, "direction" character varying(5) NOT NULL, "quantity" integer NOT NULL, "average_entry_price" numeric(12,2) NOT NULL, "current_sl" numeric(12,2), "target_price" numeric(12,2), "trailing_stop_mechanism" character varying, "unrealized_pnl" numeric(15,2) NOT NULL DEFAULT '0', "mfe" numeric(15,2) NOT NULL DEFAULT '0', "mae" numeric(15,2) NOT NULL DEFAULT '0', "opened_at" TIMESTAMP WITH TIME ZONE NOT NULL, "closed_at" TIMESTAMP WITH TIME ZONE, "is_open" boolean NOT NULL DEFAULT true, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_17e4e62ccd5749b289ae3fae6f3" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_positions_instrument_is_open" ON "positions" ("instrument_id", "is_open") `,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_positions_engine_is_open" ON "positions" ("engine", "is_open") `,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "trades" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "engine" character varying(10) NOT NULL, "position_id" uuid NOT NULL, "instrument_id" uuid NOT NULL, "strategy_id" uuid NOT NULL, "signal_id" uuid, "direction" character varying(5) NOT NULL, "quantity" integer NOT NULL, "lot_size" integer NOT NULL, "entry_price" numeric(12,2) NOT NULL, "exit_price" numeric(12,2) NOT NULL, "entry_time" TIMESTAMP WITH TIME ZONE NOT NULL, "exit_time" TIMESTAMP WITH TIME ZONE NOT NULL, "mfe" numeric(15,2) NOT NULL, "mae" numeric(15,2) NOT NULL, "gross_pnl" numeric(15,2) NOT NULL, "brokerage" numeric(10,4) NOT NULL, "stt" numeric(10,4) NOT NULL, "exchange_charges" numeric(10,4) NOT NULL, "gst" numeric(10,4) NOT NULL, "sebi_charges" numeric(10,4) NOT NULL, "stamp_duty" numeric(10,4) NOT NULL, "net_pnl" numeric(15,2) NOT NULL, "exit_reason" character varying NOT NULL, "execution_slippage" numeric(10,4) NOT NULL, "signal_score" numeric(5,2), "dhan_entry_order_id" character varying, "dhan_exit_order_id" character varying, "qcr" numeric(8,4), "exit_classification" character varying, "execution_quality" character varying, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_c6d7c36a837411ba5194dc58595" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_trades_strategy_engine_entry_time" ON "trades" ("strategy_id", "engine", "entry_time") `,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_trades_engine_entry_time" ON "trades" ("engine", "entry_time") `,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "system_health_events" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "event_type" character varying NOT NULL, "module_name" character varying NOT NULL, "severity" character varying(10) NOT NULL, "message" text NOT NULL, "metadata" jsonb, "timestamp" TIMESTAMP WITH TIME ZONE NOT NULL, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_cb366d95a4c7a97f447848b36b2" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_system_health_events_severity_timestamp" ON "system_health_events" ("severity", "timestamp") `,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_system_health_events_module_timestamp" ON "system_health_events" ("module_name", "timestamp") `,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "strategies" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "code" character varying NOT NULL, "name" character varying NOT NULL, "is_active" boolean NOT NULL DEFAULT true, "is_suspended" boolean NOT NULL DEFAULT false, "compatible_regimes" text array NOT NULL, "min_rr_ratio" numeric(4,2) NOT NULL, "max_concurrent_positions" integer NOT NULL, "opening_phase_compatible" boolean NOT NULL DEFAULT false, "min_performance_threshold" numeric(5,2), "current_oos_win_rate" numeric(5,2), "price_deviation_threshold" numeric(6,4), "max_validity_duration_seconds" integer, "suspension_reason" character varying, "failing_gate_value" numeric(15,6), "version" integer NOT NULL DEFAULT '1', "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "UQ_fae2c5d1aa5b57a7dd2c455f05e" UNIQUE ("code"), CONSTRAINT "PK_9a0d363ddf5b40d080147363238" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "strategy_versions" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "version" integer NOT NULL, "config_snapshot" jsonb NOT NULL, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "strategy_id" uuid NOT NULL, CONSTRAINT "uq_strategy_versions_strategy_version" UNIQUE ("strategy_id", "version"), CONSTRAINT "PK_a19b89b1ed4165f595cd889f86f" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "strategy_performance" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "strategy_id" uuid NOT NULL, "engine" character varying(10) NOT NULL, "regime" character varying(50), "trading_date" date NOT NULL, "trades_count" integer NOT NULL DEFAULT '0', "win_count" integer NOT NULL DEFAULT '0', "loss_count" integer NOT NULL DEFAULT '0', "total_net_pnl" numeric(15,2) NOT NULL DEFAULT '0.00', "selection_rationale" text, "oos_win_rate" numeric(5,2), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_e3a830e9e7c64234e09423091fd" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_strategy_performance_strategy_engine_date" ON "strategy_performance" ("strategy_id", "engine", "trading_date") `,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "signals" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "instrument_id" uuid NOT NULL, "engine" character varying NOT NULL, "direction" character varying NOT NULL, "entry_price" numeric(12,2) NOT NULL, "stop_loss_price" numeric(12,2) NOT NULL, "target_price" numeric(12,2) NOT NULL, "position_size" integer NOT NULL, "composite_score" numeric(5,2) NOT NULL, "score_regime_alignment" numeric(4,2) NOT NULL, "score_price_structure" numeric(4,2) NOT NULL, "score_volume_confirmation" numeric(4,2) NOT NULL, "score_momentum" numeric(4,2) NOT NULL, "score_vwap_trend" numeric(4,2) NOT NULL, "score_options_futures" numeric(4,2) NOT NULL, "score_liquidity_execution" numeric(4,2) NOT NULL, "score_rr_quality" numeric(4,2) NOT NULL, "measured_inputs" jsonb NOT NULL, "status" character varying NOT NULL, "rejection_reason" character varying, "signal_timestamp" TIMESTAMP WITH TIME ZONE NOT NULL, "expiry_timestamp" TIMESTAMP WITH TIME ZONE, "dhan_order_id" character varying, "regime" character varying, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "strategy_id" uuid NOT NULL, CONSTRAINT "PK_04eeac09c09b65bc55c628c101d" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_signals_engine_status_ts" ON "signals" ("engine", "status", "signal_timestamp") `,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_signals_instrument_status_ts" ON "signals" ("instrument_id", "status", "signal_timestamp") `,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "signal_evaluations" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "instrument_id" uuid NOT NULL, "evaluated_at" TIMESTAMP WITH TIME ZONE NOT NULL, "produced_signal" boolean NOT NULL, "skip_reason" character varying, "regime_at_evaluation" character varying, "strategy_id" uuid NOT NULL, "signal_id" uuid, CONSTRAINT "PK_6ac28f8d38205bfd780597edc73" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_signal_evaluations_strategy_evaluated_at" ON "signal_evaluations" ("strategy_id", "evaluated_at") `,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "risk_events" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "engine" character varying(10) NOT NULL, "event_type" character varying(30) NOT NULL, "reason" text NOT NULL, "triggering_metric_name" character varying(100), "triggering_metric_value" numeric(15,4), "threshold_value" numeric(15,4), "affected_instrument_id" uuid, "affected_strategy_id" uuid, "initiating_actor" character varying(100) NOT NULL, "occurred_at" TIMESTAMP WITH TIME ZONE NOT NULL, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_f05a2fd43548e862b7b5c489f44" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_risk_events_engine_event_type_occurred_at" ON "risk_events" ("engine", "event_type", "occurred_at") `,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "paper_trades" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "engine" character varying(10) NOT NULL DEFAULT 'PAPER', "position_id" uuid NOT NULL, "instrument_id" uuid NOT NULL, "strategy_id" uuid, "signal_id" uuid, "direction" character varying(5) NOT NULL, "quantity" integer NOT NULL, "lot_size" integer NOT NULL DEFAULT '1', "entry_price" numeric(12,2) NOT NULL, "exit_price" numeric(12,2) NOT NULL, "entry_time" TIMESTAMP WITH TIME ZONE NOT NULL, "exit_time" TIMESTAMP WITH TIME ZONE NOT NULL, "mfe" numeric(15,2) NOT NULL DEFAULT '0', "mae" numeric(15,2) NOT NULL DEFAULT '0', "gross_pnl" numeric(15,2) NOT NULL, "brokerage" numeric(10,4) NOT NULL, "stt" numeric(10,4) NOT NULL, "exchange_charges" numeric(10,4) NOT NULL, "gst" numeric(10,4) NOT NULL, "sebi_charges" numeric(10,4) NOT NULL, "stamp_duty" numeric(10,4) NOT NULL, "net_pnl" numeric(15,2) NOT NULL, "exit_reason" character varying NOT NULL, "execution_slippage" numeric(10,4) NOT NULL DEFAULT '0', "signal_score" numeric(5,2), "dhan_entry_order_id" character varying, "dhan_exit_order_id" character varying, "qcr" numeric(8,4), "exit_classification" character varying, "execution_quality" character varying, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_5a569a3797709ab0d6128583705" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_paper_trades_strategy_entry_time" ON "paper_trades" ("strategy_id", "entry_time") `,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_paper_trades_entry_time" ON "paper_trades" ("entry_time") `,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "paper_positions" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "engine" character varying(10) NOT NULL DEFAULT 'PAPER', "instrument_id" uuid NOT NULL, "signal_id" uuid, "direction" character varying(5) NOT NULL, "quantity" integer NOT NULL, "average_entry_price" numeric(12,2) NOT NULL, "current_sl" numeric(12,2), "target_price" numeric(12,2), "trailing_stop_mechanism" character varying, "unrealized_pnl" numeric(15,2) NOT NULL DEFAULT '0', "mfe" numeric(15,2) NOT NULL DEFAULT '0', "mae" numeric(15,2) NOT NULL DEFAULT '0', "opened_at" TIMESTAMP WITH TIME ZONE NOT NULL, "closed_at" TIMESTAMP WITH TIME ZONE, "is_open" boolean NOT NULL DEFAULT true, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_72380f1ca0db030210595ff7724" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_paper_positions_instrument_is_open" ON "paper_positions" ("instrument_id", "is_open") `,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_paper_positions_is_open" ON "paper_positions" ("is_open") `,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "paper_executions" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "order_id" uuid NOT NULL, "engine" character varying(10) NOT NULL DEFAULT 'PAPER', "dhan_trade_id" character varying, "fill_price" numeric(12,2) NOT NULL, "fill_quantity" integer NOT NULL, "fill_timestamp" TIMESTAMP WITH TIME ZONE NOT NULL, "slippage" numeric(10,4), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_4b4c708f368547d635471096506" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_paper_executions_order_id" ON "paper_executions" ("order_id") `,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "paper_orders" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "idempotency_key" character varying(100) NOT NULL, "engine" character varying(10) NOT NULL DEFAULT 'PAPER', "signal_id" uuid, "instrument_id" uuid NOT NULL, "order_type" character varying(10) NOT NULL, "transaction_type" character varying(4) NOT NULL, "quantity" integer NOT NULL, "price" numeric(12,2), "trigger_price" numeric(12,2), "dhan_order_id" character varying, "dhan_correlation_id" character varying, "status" character varying(20) NOT NULL, "rejection_reason" text, "submitted_at" TIMESTAMP WITH TIME ZONE, "filled_quantity" integer NOT NULL DEFAULT '0', "average_fill_price" numeric(12,2), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "UQ_cb3ad591782851d0aed1dde93f4" UNIQUE ("idempotency_key"), CONSTRAINT "PK_34a4dea4cb983e60268bd068194" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_paper_orders_created_at" ON "paper_orders" ("created_at") `,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_paper_orders_instrument_status" ON "paper_orders" ("instrument_id", "status") `,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "executions" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "order_id" uuid NOT NULL, "engine" character varying(10) NOT NULL, "dhan_trade_id" character varying, "fill_price" numeric(12,2) NOT NULL, "fill_quantity" integer NOT NULL, "fill_timestamp" TIMESTAMP WITH TIME ZONE NOT NULL, "slippage" numeric(10,4), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_703e64e0ef651986191844b7b8b" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(`CREATE INDEX "idx_executions_order_id" ON "executions" ("order_id") `);
+    await queryRunner.query(
+      `CREATE TABLE "orders" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "idempotency_key" character varying(100) NOT NULL, "engine" character varying(10) NOT NULL, "signal_id" uuid, "instrument_id" uuid NOT NULL, "order_type" character varying(10) NOT NULL, "transaction_type" character varying(4) NOT NULL, "quantity" integer NOT NULL, "price" numeric(12,2), "trigger_price" numeric(12,2), "dhan_order_id" character varying, "dhan_correlation_id" character varying, "status" character varying(20) NOT NULL, "rejection_reason" text, "submitted_at" TIMESTAMP WITH TIME ZONE, "filled_quantity" integer NOT NULL DEFAULT '0', "average_fill_price" numeric(12,2), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "UQ_59d6b7756aeb6cbb43a093d15a1" UNIQUE ("idempotency_key"), CONSTRAINT "PK_710e2d4957aa5878dfe94e4ac2f" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_orders_engine_created_at" ON "orders" ("engine", "created_at") `,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_orders_instrument_status" ON "orders" ("instrument_id", "status") `,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "option_chain_snapshots" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "underlying" character varying NOT NULL, "expiry_date" date NOT NULL, "snapshot_at" TIMESTAMP WITH TIME ZONE NOT NULL, "chain_data" jsonb NOT NULL, "total_call_oi" bigint, "total_put_oi" bigint, "pcr" numeric(8,4), "iv_atm" numeric(8,4), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_e3fe92f2381215020a2f91a3cba" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_option_chain_snapshots_underlying_expiry_snapshot_at" ON "option_chain_snapshots" ("underlying", "expiry_date", "snapshot_at") `,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "model_versions" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "model_name" character varying(100) NOT NULL, "version" integer NOT NULL, "state" character varying(20) NOT NULL, "training_dataset_ref" character varying(500), "feature_definitions" jsonb, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_77c0256872dcc26394dba4b87ec" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "model_evaluations" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "model_version_id" uuid NOT NULL, "evaluated_at" TIMESTAMP WITH TIME ZONE NOT NULL, "validation_type" character varying(20) NOT NULL, "expectancy" numeric(10,4), "win_rate" numeric(5,2), "max_drawdown" numeric(8,4), "passed_all_gates" boolean NOT NULL, "failure_reason" text, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_73dbe986e745a79bdaefae25c9e" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_model_evaluations_model_version_id" ON "model_evaluations" ("model_version_id") `,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "market_snapshots" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "instrument_id" uuid NOT NULL, "ltp" numeric(12,2) NOT NULL, "open_price" numeric(12,2) NOT NULL, "high_price" numeric(12,2) NOT NULL, "low_price" numeric(12,2) NOT NULL, "close_price" numeric(12,2) NOT NULL, "volume" bigint NOT NULL, "oi" bigint, "bid_price" numeric(12,2), "ask_price" numeric(12,2), "bid_qty" integer, "ask_qty" integer, "snapshot_at" TIMESTAMP WITH TIME ZONE NOT NULL, CONSTRAINT "PK_fda8554552bb9c9898c5a9bedd4" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_market_snapshots_instrument_snapshot_at" ON "market_snapshots" ("instrument_id", "snapshot_at") `,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "market_regimes" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "regime" character varying NOT NULL, "classified_at" TIMESTAMP WITH TIME ZONE NOT NULL, "nifty_trend" character varying NOT NULL, "banknifty_trend" character varying NOT NULL, "market_breadth" numeric(5,2) NOT NULL, "advance_decline_ratio" numeric(8,4) NOT NULL, "vwap_deviation" numeric(8,4) NOT NULL, "india_vix" numeric(6,2) NOT NULL, "atr" numeric(10,4) NOT NULL, "relative_volume" numeric(8,4) NOT NULL, "sector_strength" numeric(5,2), "futures_basis" numeric(8,4), "classification_rationale" text, CONSTRAINT "PK_383f12f0b2567fb723d5fcb73ea" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_market_regimes_classified_at" ON "market_regimes" ("classified_at") `,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "instruments" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "security_id" character varying NOT NULL, "trading_symbol" character varying NOT NULL, "exchange" character varying NOT NULL, "segment" character varying NOT NULL, "instrument_type" character varying NOT NULL, "underlying" character varying NOT NULL, "expiry_date" date, "strike_price" numeric(10,2), "option_type" character varying, "lot_size" integer NOT NULL, "tick_size" numeric(10,4) NOT NULL, "freeze_quantity" integer, "open_interest" integer DEFAULT '0', "avg_daily_volume" integer DEFAULT '0', "is_active" boolean NOT NULL DEFAULT true, "liquidity_score" numeric(5,2) NOT NULL DEFAULT '0.00', "is_tradable" boolean NOT NULL DEFAULT false, "last_scanned_at" TIMESTAMP WITH TIME ZONE, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "UQ_168587346ba0a840cead05a9c2b" UNIQUE ("security_id"), CONSTRAINT "PK_44d772c3199b38559c5fb666eb6" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_instruments_is_active_liquidity_score" ON "instruments" ("is_active", "liquidity_score") `,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_instruments_underlying_expiry_option_type" ON "instruments" ("underlying", "expiry_date", "option_type") `,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "historical_candles" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "instrument_id" uuid NOT NULL, "granularity" character varying(4) NOT NULL, "open_price" numeric(12,2) NOT NULL, "high_price" numeric(12,2) NOT NULL, "low_price" numeric(12,2) NOT NULL, "close_price" numeric(12,2) NOT NULL, "volume" bigint NOT NULL, "oi" bigint, "timestamp" TIMESTAMP WITH TIME ZONE NOT NULL, CONSTRAINT "UQ_historical_candles_instrument_granularity_timestamp" UNIQUE ("instrument_id", "granularity", "timestamp"), CONSTRAINT "PK_2b7d98542f136b945c883e75607" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_historical_candles_instrument_granularity_timestamp" ON "historical_candles" ("instrument_id", "granularity", "timestamp") `,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "daily_trading_summaries" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "trading_date" date NOT NULL, "engine" character varying(10) NOT NULL, "total_trades" integer NOT NULL DEFAULT '0', "winning_trades" integer NOT NULL DEFAULT '0', "losing_trades" integer NOT NULL DEFAULT '0', "gross_pnl" numeric(15,2) NOT NULL DEFAULT '0.00', "total_charges" numeric(15,2) NOT NULL DEFAULT '0.00', "net_pnl" numeric(15,2) NOT NULL DEFAULT '0.00', "closing_capital" numeric(15,2), "two_loss_lockout_triggered" boolean NOT NULL DEFAULT false, "emergency_halt_triggered" boolean NOT NULL DEFAULT false, "kill_switch_activated" boolean NOT NULL DEFAULT false, "no_trade_reason" text, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "uq_daily_trading_summaries_date_engine" UNIQUE ("trading_date", "engine"), CONSTRAINT "PK_438d6c567a2213e52699d2c205a" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "capital_ledgers" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "engine" character varying(10) NOT NULL, "event_type" character varying(30) NOT NULL, "trade_id" uuid, "amount" numeric(15,2) NOT NULL, "balance_before" numeric(15,2) NOT NULL, "balance_after" numeric(15,2) NOT NULL, "description" character varying(500), "occurred_at" TIMESTAMP WITH TIME ZONE NOT NULL, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_11aaef3c75efaf31d63a452a2d3" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_capital_ledgers_engine_occurred_at" ON "capital_ledgers" ("engine", "occurred_at") `,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "broker_accounts" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "user_id" character varying NOT NULL, "broker" character varying NOT NULL DEFAULT 'DHAN', "client_id" character varying NOT NULL, "api_key" character varying NOT NULL, "access_token" character varying NOT NULL, "is_active" boolean NOT NULL DEFAULT false, "static_ip" character varying, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_2e5ca0caf331244f0f855ab3215" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_3a6679892983997e5806dfa72c" ON "broker_accounts" ("user_id", "broker") `,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "broker_sessions" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "broker_account_id" uuid NOT NULL, "session_token" character varying NOT NULL, "expires_at" TIMESTAMP WITH TIME ZONE NOT NULL, "is_active" boolean NOT NULL DEFAULT true, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_f0fce68c933fa975d8433e65dbf" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_2d923e63326e158aab621a2675" ON "broker_sessions" ("broker_account_id", "is_active") `,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "audit_logs" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "user_id" character varying, "event_type" character varying NOT NULL, "entity_type" character varying, "entity_id" uuid, "field_name" character varying, "previous_value" character varying, "new_value" character varying, "ip_address" character varying, "metadata" jsonb, "outcome" character varying(10) NOT NULL, "timestamp" TIMESTAMP WITH TIME ZONE NOT NULL, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_1bb179d048bbc581caa3b013439" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_audit_logs_event_type_timestamp" ON "audit_logs" ("event_type", "timestamp") `,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_audit_logs_user_timestamp" ON "audit_logs" ("user_id", "timestamp") `,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "trades" ADD CONSTRAINT "FK_b846c59accf5f6e664f6069899c" FOREIGN KEY ("position_id") REFERENCES "positions"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "strategy_versions" ADD CONSTRAINT "FK_537595ab6aef33cba842807ea8c" FOREIGN KEY ("strategy_id") REFERENCES "strategies"("id") ON DELETE CASCADE ON UPDATE NO ACTION`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "signals" ADD CONSTRAINT "FK_9ec1d3272c715761109633b145f" FOREIGN KEY ("strategy_id") REFERENCES "strategies"("id") ON DELETE CASCADE ON UPDATE NO ACTION`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "signal_evaluations" ADD CONSTRAINT "FK_441a2b0285132226c6b8c45b375" FOREIGN KEY ("strategy_id") REFERENCES "strategies"("id") ON DELETE CASCADE ON UPDATE NO ACTION`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "signal_evaluations" ADD CONSTRAINT "FK_3bfa88cffe5d322273b5f6fe6ed" FOREIGN KEY ("signal_id") REFERENCES "signals"("id") ON DELETE SET NULL ON UPDATE NO ACTION`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "paper_trades" ADD CONSTRAINT "FK_36125ed6072e149535b53b3f2d8" FOREIGN KEY ("position_id") REFERENCES "paper_positions"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "paper_executions" ADD CONSTRAINT "FK_ccc91b735f869d41ec969b0dc25" FOREIGN KEY ("order_id") REFERENCES "paper_orders"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "executions" ADD CONSTRAINT "FK_f1e4217a13c5213290439948f69" FOREIGN KEY ("order_id") REFERENCES "orders"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "model_evaluations" ADD CONSTRAINT "FK_b2235e0e519c6183b7150525745" FOREIGN KEY ("model_version_id") REFERENCES "model_versions"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "broker_sessions" ADD CONSTRAINT "FK_64394105db333c34d659a1f8919" FOREIGN KEY ("broker_account_id") REFERENCES "broker_accounts"("id") ON DELETE CASCADE ON UPDATE NO ACTION`,
+    );
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`ALTER TABLE "broker_sessions" DROP CONSTRAINT "FK_64394105db333c34d659a1f8919"`);
-        await queryRunner.query(`ALTER TABLE "model_evaluations" DROP CONSTRAINT "FK_b2235e0e519c6183b7150525745"`);
-        await queryRunner.query(`ALTER TABLE "executions" DROP CONSTRAINT "FK_f1e4217a13c5213290439948f69"`);
-        await queryRunner.query(`ALTER TABLE "paper_executions" DROP CONSTRAINT "FK_ccc91b735f869d41ec969b0dc25"`);
-        await queryRunner.query(`ALTER TABLE "paper_trades" DROP CONSTRAINT "FK_36125ed6072e149535b53b3f2d8"`);
-        await queryRunner.query(`ALTER TABLE "signal_evaluations" DROP CONSTRAINT "FK_3bfa88cffe5d322273b5f6fe6ed"`);
-        await queryRunner.query(`ALTER TABLE "signal_evaluations" DROP CONSTRAINT "FK_441a2b0285132226c6b8c45b375"`);
-        await queryRunner.query(`ALTER TABLE "signals" DROP CONSTRAINT "FK_9ec1d3272c715761109633b145f"`);
-        await queryRunner.query(`ALTER TABLE "strategy_versions" DROP CONSTRAINT "FK_537595ab6aef33cba842807ea8c"`);
-        await queryRunner.query(`ALTER TABLE "trades" DROP CONSTRAINT "FK_b846c59accf5f6e664f6069899c"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_audit_logs_user_timestamp"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_audit_logs_event_type_timestamp"`);
-        await queryRunner.query(`DROP TABLE "audit_logs"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_2d923e63326e158aab621a2675"`);
-        await queryRunner.query(`DROP TABLE "broker_sessions"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_3a6679892983997e5806dfa72c"`);
-        await queryRunner.query(`DROP TABLE "broker_accounts"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_capital_ledgers_engine_occurred_at"`);
-        await queryRunner.query(`DROP TABLE "capital_ledgers"`);
-        await queryRunner.query(`DROP TABLE "daily_trading_summaries"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_historical_candles_instrument_granularity_timestamp"`);
-        await queryRunner.query(`DROP TABLE "historical_candles"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_instruments_underlying_expiry_option_type"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_instruments_is_active_liquidity_score"`);
-        await queryRunner.query(`DROP TABLE "instruments"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_market_regimes_classified_at"`);
-        await queryRunner.query(`DROP TABLE "market_regimes"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_market_snapshots_instrument_snapshot_at"`);
-        await queryRunner.query(`DROP TABLE "market_snapshots"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_model_evaluations_model_version_id"`);
-        await queryRunner.query(`DROP TABLE "model_evaluations"`);
-        await queryRunner.query(`DROP TABLE "model_versions"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_option_chain_snapshots_underlying_expiry_snapshot_at"`);
-        await queryRunner.query(`DROP TABLE "option_chain_snapshots"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_orders_instrument_status"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_orders_engine_created_at"`);
-        await queryRunner.query(`DROP TABLE "orders"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_executions_order_id"`);
-        await queryRunner.query(`DROP TABLE "executions"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_paper_orders_instrument_status"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_paper_orders_created_at"`);
-        await queryRunner.query(`DROP TABLE "paper_orders"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_paper_executions_order_id"`);
-        await queryRunner.query(`DROP TABLE "paper_executions"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_paper_positions_is_open"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_paper_positions_instrument_is_open"`);
-        await queryRunner.query(`DROP TABLE "paper_positions"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_paper_trades_entry_time"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_paper_trades_strategy_entry_time"`);
-        await queryRunner.query(`DROP TABLE "paper_trades"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_risk_events_engine_event_type_occurred_at"`);
-        await queryRunner.query(`DROP TABLE "risk_events"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_signal_evaluations_strategy_evaluated_at"`);
-        await queryRunner.query(`DROP TABLE "signal_evaluations"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_signals_instrument_status_ts"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_signals_engine_status_ts"`);
-        await queryRunner.query(`DROP TABLE "signals"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_strategy_performance_strategy_engine_date"`);
-        await queryRunner.query(`DROP TABLE "strategy_performance"`);
-        await queryRunner.query(`DROP TABLE "strategy_versions"`);
-        await queryRunner.query(`DROP TABLE "strategies"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_system_health_events_module_timestamp"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_system_health_events_severity_timestamp"`);
-        await queryRunner.query(`DROP TABLE "system_health_events"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_trades_engine_entry_time"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_trades_strategy_engine_entry_time"`);
-        await queryRunner.query(`DROP TABLE "trades"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_positions_engine_is_open"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_positions_instrument_is_open"`);
-        await queryRunner.query(`DROP TABLE "positions"`);
-        await queryRunner.query(`DROP TABLE "user_settings"`);
-    }
-
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `ALTER TABLE "broker_sessions" DROP CONSTRAINT "FK_64394105db333c34d659a1f8919"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "model_evaluations" DROP CONSTRAINT "FK_b2235e0e519c6183b7150525745"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "executions" DROP CONSTRAINT "FK_f1e4217a13c5213290439948f69"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "paper_executions" DROP CONSTRAINT "FK_ccc91b735f869d41ec969b0dc25"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "paper_trades" DROP CONSTRAINT "FK_36125ed6072e149535b53b3f2d8"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "signal_evaluations" DROP CONSTRAINT "FK_3bfa88cffe5d322273b5f6fe6ed"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "signal_evaluations" DROP CONSTRAINT "FK_441a2b0285132226c6b8c45b375"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "signals" DROP CONSTRAINT "FK_9ec1d3272c715761109633b145f"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "strategy_versions" DROP CONSTRAINT "FK_537595ab6aef33cba842807ea8c"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "trades" DROP CONSTRAINT "FK_b846c59accf5f6e664f6069899c"`,
+    );
+    await queryRunner.query(`DROP INDEX "public"."idx_audit_logs_user_timestamp"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_audit_logs_event_type_timestamp"`);
+    await queryRunner.query(`DROP TABLE "audit_logs"`);
+    await queryRunner.query(`DROP INDEX "public"."IDX_2d923e63326e158aab621a2675"`);
+    await queryRunner.query(`DROP TABLE "broker_sessions"`);
+    await queryRunner.query(`DROP INDEX "public"."IDX_3a6679892983997e5806dfa72c"`);
+    await queryRunner.query(`DROP TABLE "broker_accounts"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_capital_ledgers_engine_occurred_at"`);
+    await queryRunner.query(`DROP TABLE "capital_ledgers"`);
+    await queryRunner.query(`DROP TABLE "daily_trading_summaries"`);
+    await queryRunner.query(
+      `DROP INDEX "public"."IDX_historical_candles_instrument_granularity_timestamp"`,
+    );
+    await queryRunner.query(`DROP TABLE "historical_candles"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_instruments_underlying_expiry_option_type"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_instruments_is_active_liquidity_score"`);
+    await queryRunner.query(`DROP TABLE "instruments"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_market_regimes_classified_at"`);
+    await queryRunner.query(`DROP TABLE "market_regimes"`);
+    await queryRunner.query(`DROP INDEX "public"."IDX_market_snapshots_instrument_snapshot_at"`);
+    await queryRunner.query(`DROP TABLE "market_snapshots"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_model_evaluations_model_version_id"`);
+    await queryRunner.query(`DROP TABLE "model_evaluations"`);
+    await queryRunner.query(`DROP TABLE "model_versions"`);
+    await queryRunner.query(
+      `DROP INDEX "public"."IDX_option_chain_snapshots_underlying_expiry_snapshot_at"`,
+    );
+    await queryRunner.query(`DROP TABLE "option_chain_snapshots"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_orders_instrument_status"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_orders_engine_created_at"`);
+    await queryRunner.query(`DROP TABLE "orders"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_executions_order_id"`);
+    await queryRunner.query(`DROP TABLE "executions"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_paper_orders_instrument_status"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_paper_orders_created_at"`);
+    await queryRunner.query(`DROP TABLE "paper_orders"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_paper_executions_order_id"`);
+    await queryRunner.query(`DROP TABLE "paper_executions"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_paper_positions_is_open"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_paper_positions_instrument_is_open"`);
+    await queryRunner.query(`DROP TABLE "paper_positions"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_paper_trades_entry_time"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_paper_trades_strategy_entry_time"`);
+    await queryRunner.query(`DROP TABLE "paper_trades"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_risk_events_engine_event_type_occurred_at"`);
+    await queryRunner.query(`DROP TABLE "risk_events"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_signal_evaluations_strategy_evaluated_at"`);
+    await queryRunner.query(`DROP TABLE "signal_evaluations"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_signals_instrument_status_ts"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_signals_engine_status_ts"`);
+    await queryRunner.query(`DROP TABLE "signals"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_strategy_performance_strategy_engine_date"`);
+    await queryRunner.query(`DROP TABLE "strategy_performance"`);
+    await queryRunner.query(`DROP TABLE "strategy_versions"`);
+    await queryRunner.query(`DROP TABLE "strategies"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_system_health_events_module_timestamp"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_system_health_events_severity_timestamp"`);
+    await queryRunner.query(`DROP TABLE "system_health_events"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_trades_engine_entry_time"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_trades_strategy_engine_entry_time"`);
+    await queryRunner.query(`DROP TABLE "trades"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_positions_engine_is_open"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_positions_instrument_is_open"`);
+    await queryRunner.query(`DROP TABLE "positions"`);
+    await queryRunner.query(`DROP TABLE "user_settings"`);
+  }
 }

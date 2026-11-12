@@ -30,4 +30,22 @@ module.exports = {
       },
     ],
   },
+  overrides: [
+    // Frontend React files (src/frontend/**) and extension files use their
+    // own tsconfigs and are excluded from the main tsconfig.json.
+    // Run with relaxed type-aware rules so ESLint can still lint them.
+    {
+      files: ['src/frontend/**/*.{ts,tsx}', 'extension/src/**/*.{ts,tsx}'],
+      parserOptions: {
+        project: null,  // disable type-aware linting for these files
+      },
+      rules: {
+        // Disable rules that require type information
+        '@typescript-eslint/no-unsafe-assignment': 'off',
+        '@typescript-eslint/no-unsafe-member-access': 'off',
+        '@typescript-eslint/no-unsafe-call': 'off',
+        '@typescript-eslint/no-unsafe-return': 'off',
+      },
+    },
+  ],
 };

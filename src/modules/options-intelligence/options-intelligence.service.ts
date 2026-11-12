@@ -65,10 +65,7 @@ export class OptionsIntelligenceService {
    * @param segment          Exchange segment (default 'IDX_I' for index options).
    * @returns                Array of expiry dates in YYYY-MM-DD format, nearest first.
    */
-  async getActiveExpiries(
-    underlyingScrip: number,
-    segment?: string,
-  ): Promise<string[]> {
+  async getActiveExpiries(underlyingScrip: number, segment?: string): Promise<string[]> {
     const seg = segment ?? this.configService.get<string>('UNDERLYING_SEGMENT') ?? 'IDX_I';
     const response = await this.dhanApiClient.getOptionExpiryList(underlyingScrip, seg);
     return response.data;
@@ -115,6 +112,14 @@ export class OptionsIntelligenceService {
           gamma: leg.greeks.gamma,
           theta: leg.greeks.theta,
           vega: leg.greeks.vega,
+          iv: leg.implied_volatility,
+          ltp: leg.last_price,
+          bidPrice: leg.top_bid_price,
+          askPrice: leg.top_ask_price,
+          bidQty: leg.top_bid_quantity,
+          askQty: leg.top_ask_quantity,
+          oi: leg.oi,
+          volume: leg.volume,
           computedAt,
           instrumentId: securityId,
         };
@@ -131,6 +136,14 @@ export class OptionsIntelligenceService {
           gamma: leg.greeks.gamma,
           theta: leg.greeks.theta,
           vega: leg.greeks.vega,
+          iv: leg.implied_volatility,
+          ltp: leg.last_price,
+          bidPrice: leg.top_bid_price,
+          askPrice: leg.top_ask_price,
+          bidQty: leg.top_bid_quantity,
+          askQty: leg.top_ask_quantity,
+          oi: leg.oi,
+          volume: leg.volume,
           computedAt,
           instrumentId: securityId,
         };

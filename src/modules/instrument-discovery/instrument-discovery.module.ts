@@ -49,6 +49,7 @@ import { SystemHealthEvents } from '../../database/entities/system-health-events
 import { InstrumentDiscoveryService } from './instrument-discovery.service';
 import { LiquidityScoreService } from './liquidity-score.service';
 import { SubscriptionRotationService } from './subscription-rotation.service';
+import { InstrumentMasterService } from './instrument-master.service';
 import { DhanApiModule } from '../dhan/dhan-api.module';
 import { NotificationModule } from '../notification/notification.module';
 
@@ -65,7 +66,17 @@ import { NotificationModule } from '../notification/notification.module';
     // Provides NotificationService for CRITICAL scan-failure alerts (Req 4.7).
     NotificationModule,
   ],
-  providers: [InstrumentDiscoveryService, LiquidityScoreService, SubscriptionRotationService],
-  exports: [InstrumentDiscoveryService, LiquidityScoreService, SubscriptionRotationService],
+  providers: [
+    InstrumentDiscoveryService,
+    LiquidityScoreService,
+    SubscriptionRotationService,
+    InstrumentMasterService,
+  ],
+  exports: [
+    InstrumentDiscoveryService,
+    LiquidityScoreService,
+    SubscriptionRotationService,
+    InstrumentMasterService,
+  ],
 })
 export class InstrumentDiscoveryModule {}

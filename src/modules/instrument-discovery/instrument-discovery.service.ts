@@ -53,13 +53,13 @@ import { NotificationAlert } from '../notification/notification.types';
  * Any INDEX_OPTION whose underlying is NOT in this list is blocked.
  */
 export const ALLOWED_INDEX_UNDERLYINGS = [
-  'NIFTY',       // Nifty 50
-  'BANKNIFTY',   // Bank Nifty
-  'FINNIFTY',    // Nifty Financial Services
-  'MIDCPNIFTY',  // Nifty Midcap Select
-  'SENSEX',      // BSE Sensex
-  'BANKEX',      // BSE Bankex
-  'NIFTYNXT50',  // Nifty Next 50
+  'NIFTY', // Nifty 50
+  'BANKNIFTY', // Bank Nifty
+  'FINNIFTY', // Nifty Financial Services
+  'MIDCPNIFTY', // Nifty Midcap Select
+  'SENSEX', // BSE Sensex
+  'BANKEX', // BSE Bankex
+  'NIFTYNXT50', // Nifty Next 50
 ] as const;
 
 /** Segments that are allowed for STOCK_OPTION instruments. */

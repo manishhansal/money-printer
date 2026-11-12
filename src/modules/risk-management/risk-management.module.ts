@@ -30,23 +30,22 @@ import { ScheduleModule } from '@nestjs/schedule';
 
 import { RiskEvents } from '../../database/entities/risk-events.entity';
 import { NotificationModule } from '../notification/notification.module';
+import { PortfolioModule } from '../portfolio/portfolio.module';
 import { RiskManagementService } from './risk-management.service';
 import { DailyLossStateMachineService } from './daily-loss-state-machine.service';
 import { RiskEventRecorderService } from './risk-event-recorder.service';
+import { RiskStateController } from './risk-state.controller';
 
 @Module({
   imports: [
-    // Registers the RiskEvents repository for injection into
-    // DailyLossStateMachineService and RiskEventRecorderService.
     TypeOrmModule.forFeature([RiskEvents]),
-
-    // Re-uses the existing NotificationModule so the service can publish alerts.
     NotificationModule,
-
-    // Enables @Cron decorator used by DailyLossStateMachineService.resetDailyState().
     ScheduleModule.forRoot(),
+    // Provides PortfolioService for real openPositionsCount in RiskStateController.
+    PortfolioModule,
   ],
   providers: [RiskManagementService, DailyLossStateMachineService, RiskEventRecorderService],
+  controllers: [RiskStateController],
   exports: [RiskManagementService, DailyLossStateMachineService, RiskEventRecorderService],
 })
 export class RiskManagementModule {}

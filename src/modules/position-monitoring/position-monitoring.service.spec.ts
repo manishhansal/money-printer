@@ -30,6 +30,7 @@ import { Position } from '../../database/entities/positions.entity';
 import { RedisService } from '../redis/redis.service';
 import { PositionMonitoringService } from './position-monitoring.service';
 import { GreedyTrailService } from './greedy-trail.service';
+import { TargetAndRunnerService } from './target-and-runner.service';
 import {
   POSITION_EXIT_EVENT,
   UNREALIZED_PNL_UPDATED_EVENT,
@@ -111,7 +112,17 @@ async function buildService(): Promise<{
         provide: GreedyTrailService,
         useValue: {
           firstTargetFraction: 0.5,
-          decide: jest.fn().mockResolvedValue({ shouldTrail: false, passedConditions: 0, reason: 'mock' }),
+          decide: jest
+            .fn()
+            .mockResolvedValue({ shouldTrail: false, passedConditions: 0, reason: 'mock' }),
+        },
+      },
+      {
+        provide: TargetAndRunnerService,
+        useValue: {
+          evaluatePosition: jest
+            .fn()
+            .mockResolvedValue({ action: 'HOLD', newPhase: 'ENTRY', reason: 'mock' }),
         },
       },
     ],

@@ -31,6 +31,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { RedisService } from '../redis/redis.service';
+import { NseHolidayCalendarService } from './nse-holiday-calendar.service';
 import {
   SessionPhase,
   SessionPhaseChangeEvent,
@@ -45,6 +46,10 @@ import {
  * Evaluation stops at the first matching entry, so OPENING_VOLATILITY
  * (09:15–09:20) must precede ORB_FORMATION (09:20–09:30) to implement
  * the overlap rule correctly.
+ *
+ * AFTERNOON_LATE (14:30–15:00) allows entries so strategies can trade
+ * into the final pre-close window. CLOSING (15:00–15:30) blocks all
+ * new entries and triggers mandatory square-off at 15:15 IST.
  */
 const PHASE_BOUNDARIES: PhaseBoundary[] = [
   {
@@ -78,8 +83,18 @@ const PHASE_BOUNDARIES: PhaseBoundary[] = [
     end: { hours: 14, minutes: 30 },
   },
   {
-    phase: SessionPhase.CLOSING,
+    // 14:30–15:00 IST — entries still allowed, positions monitored for exit.
+    // The mandatory square-off cron fires at 15:15; entries continue until
+    // CLOSING begins at 15:00.
+    phase: SessionPhase.AFTERNOON_LATE,
     start: { hours: 14, minutes: 30 },
+    end: { hours: 15, minutes: 0 },
+  },
+  {
+    // 15:00–15:30 IST — new entries BLOCKED (isNewEntryBlocked returns true).
+    // Mandatory square-off cron fires at 15:15 IST within this window.
+    phase: SessionPhase.CLOSING,
+    start: { hours: 15, minutes: 0 },
     end: { hours: 15, minutes: 30 },
   },
   {
@@ -102,6 +117,7 @@ export class SessionManagerService implements OnModuleInit {
   constructor(
     private readonly redisService: RedisService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly holidayCalendar: NseHolidayCalendarService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -175,18 +191,21 @@ export class SessionManagerService implements OnModuleInit {
   // ---------------------------------------------------------------------------
 
   /**
-   * Determines the NSE session phase for the given UTC timestamp by converting
-   * it to IST (UTC+05:30) and comparing the time-of-day against the phase
-   * boundaries table.
+   * Determines the NSE session phase for the given UTC timestamp.
    *
-   * Evaluation is first-match: OPENING_VOLATILITY is listed before ORB_FORMATION
-   * so the 09:15–09:20 overlap resolves to OPENING_VOLATILITY as specified.
-   *
-   * @param utcDate  Any Date object representing a wall-clock moment (UTC).
-   * @returns        The matching SessionPhase, or MARKET_CLOSED if outside
-   *                 the 09:00–16:00 IST window.
+   * Returns MARKET_CLOSED for NSE holidays (NseHolidayCalendarService check)
+   * and for timestamps outside the 09:00–16:00 IST window.
    */
   determinePhase(utcDate: Date): SessionPhase {
+    // ── NSE holiday check ─────────────────────────────────────────────────
+    if (this.holidayCalendar.isHoliday(utcDate)) {
+      const name = this.holidayCalendar.getHolidayName(utcDate);
+      this.logger.debug(
+        `[SessionManager] NSE holiday (${name ?? 'holiday'}) — returning MARKET_CLOSED`,
+      );
+      return SessionPhase.MARKET_CLOSED;
+    }
+
     const istMinutes = this.toIstMinutes(utcDate);
 
     for (const boundary of PHASE_BOUNDARIES) {

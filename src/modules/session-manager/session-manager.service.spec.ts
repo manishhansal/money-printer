@@ -18,6 +18,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SessionManagerService } from './session-manager.service';
+import { NseHolidayCalendarService } from './nse-holiday-calendar.service';
 import { RedisService } from '../redis/redis.service';
 import {
   SessionPhase,
@@ -69,6 +70,7 @@ describe('SessionManagerService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SessionManagerService,
+        NseHolidayCalendarService,
         { provide: RedisService, useValue: mockRedisService },
         { provide: EventEmitter2, useValue: mockEventEmitter },
       ],
@@ -134,8 +136,18 @@ describe('SessionManagerService', () => {
       expect(service.determinePhase(istToUtc(14, 29))).toBe(SessionPhase.AFTERNOON);
     });
 
-    it('returns CLOSING at 14:30 IST', () => {
-      expect(service.determinePhase(istToUtc(14, 30))).toBe(SessionPhase.CLOSING);
+    // 14:30 is now AFTERNOON_LATE (entries still allowed until CLOSING at 15:00)
+    it('returns AFTERNOON_LATE at 14:30 IST (entries still permitted)', () => {
+      expect(service.determinePhase(istToUtc(14, 30))).toBe(SessionPhase.AFTERNOON_LATE);
+    });
+
+    it('returns AFTERNOON_LATE at 14:59 IST (last minute before CLOSING)', () => {
+      expect(service.determinePhase(istToUtc(14, 59))).toBe(SessionPhase.AFTERNOON_LATE);
+    });
+
+    // CLOSING now starts at 15:00 IST (entries blocked; square-off at 15:15)
+    it('returns CLOSING at 15:00 IST (entries blocked from here)', () => {
+      expect(service.determinePhase(istToUtc(15, 0))).toBe(SessionPhase.CLOSING);
     });
 
     it('returns CLOSING at 15:29 IST', () => {
@@ -220,6 +232,7 @@ describe('SessionManagerService', () => {
       SessionPhase.MORNING_MOMENTUM,
       SessionPhase.MID_SESSION,
       SessionPhase.AFTERNOON,
+      SessionPhase.AFTERNOON_LATE,
       SessionPhase.CLOSING,
       SessionPhase.EOD_RECONCILIATION,
     ];
@@ -396,7 +409,11 @@ describe('SessionManagerService', () => {
       [SessionPhase.MID_SESSION, 12, 59],
       [SessionPhase.AFTERNOON, 13, 0],
       [SessionPhase.AFTERNOON, 14, 29],
-      [SessionPhase.CLOSING, 14, 30],
+      // 14:30–14:59 is now AFTERNOON_LATE (entries still allowed)
+      [SessionPhase.AFTERNOON_LATE, 14, 30],
+      [SessionPhase.AFTERNOON_LATE, 14, 59],
+      // CLOSING starts at 15:00 (entries blocked; mandatory square-off at 15:15)
+      [SessionPhase.CLOSING, 15, 0],
       [SessionPhase.CLOSING, 15, 29],
       [SessionPhase.EOD_RECONCILIATION, 15, 30],
       [SessionPhase.EOD_RECONCILIATION, 15, 59],
@@ -408,5 +425,43 @@ describe('SessionManagerService', () => {
         expect(service.determinePhase(istToUtc(h, m))).toBe(expectedPhase);
       });
     });
+  });
+});
+
+// -------------------------------------------------------------------------
+// NSE Holiday Calendar integration
+// -------------------------------------------------------------------------
+
+describe('SessionManagerService — NSE holiday check', () => {
+  let svc: SessionManagerService;
+
+  beforeEach(async () => {
+    const mod = await Test.createTestingModule({
+      providers: [
+        SessionManagerService,
+        NseHolidayCalendarService,
+        { provide: RedisService, useValue: mockRedisService },
+        { provide: EventEmitter2, useValue: mockEventEmitter },
+      ],
+    }).compile();
+    svc = mod.get<SessionManagerService>(SessionManagerService);
+  });
+
+  it('returns MARKET_CLOSED on Republic Day 2026 (2026-01-26) during market hours', () => {
+    // 10:00 IST = 04:30 UTC on 2026-01-26
+    const republicDay = new Date('2026-01-26T04:30:00.000Z');
+    expect(svc.determinePhase(republicDay)).toBe(SessionPhase.MARKET_CLOSED);
+  });
+
+  it('returns MARKET_CLOSED on Diwali 2026 (2026-11-08) during market hours', () => {
+    // 11:00 IST = 05:30 UTC
+    const diwali = new Date('2026-11-08T05:30:00.000Z');
+    expect(svc.determinePhase(diwali)).toBe(SessionPhase.MARKET_CLOSED);
+  });
+
+  it('returns MID_SESSION on a regular trading day (2026-11-11 Wednesday, non-holiday)', () => {
+    // 11:00 IST = 05:30 UTC
+    const regularDay = new Date('2026-11-11T05:30:00.000Z');
+    expect(svc.determinePhase(regularDay)).toBe(SessionPhase.MID_SESSION);
   });
 });

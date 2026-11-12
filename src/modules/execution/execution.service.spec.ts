@@ -42,6 +42,8 @@ import { NotFoundException } from '@nestjs/common';
 import { ExecutionService } from './execution.service';
 import { Order } from '../../database/entities/orders.entity';
 import { Execution } from '../../database/entities/executions.entity';
+import { Instruments } from '../../database/entities/instruments.entity';
+import { Position } from '../../database/entities/positions.entity';
 import { DhanApiClient } from '../dhan/dhan-api.client';
 import { RiskManagementService } from '../risk-management/risk-management.service';
 import { SessionManagerService } from '../session-manager/session-manager.service';
@@ -56,7 +58,11 @@ import { OrderRequest, FillData, OrderModification } from './execution.types';
 // Test fixtures
 // ---------------------------------------------------------------------------
 
-/** A valid OrderRequest that passes all 5 checks. */
+/** A valid OrderRequest that passes all 5 checks.
+ *
+ * NOTE: `quantity` is in UNITS (lots × lotSize).  Default is 50 = 1 lot × lotSize 50.
+ * Tests that override `quantity` MUST pass a value that is a multiple of `lotSize`.
+ */
 function makeOrderRequest(overrides: Partial<OrderRequest> = {}): OrderRequest {
   return {
     idempotencyKey: 'idempotency-uuid-1234',
@@ -69,7 +75,9 @@ function makeOrderRequest(overrides: Partial<OrderRequest> = {}): OrderRequest {
     productType: 'INTRADAY',
     orderType: 'LIMIT',
     transactionType: 'BUY',
-    quantity: 1,
+    // 1 lot × lotSize 50 = 50 units.  quantity MUST be a multiple of lotSize.
+    quantity: 50,
+    selectedLots: 1,
     price: 100,
     entryPrice: '100.00',
     stopLossPrice: '95.00',
@@ -122,6 +130,12 @@ function makeOrdersRepo() {
     find: jest.fn(),
     create: jest.fn(),
     save: jest.fn(),
+  };
+}
+
+function makeInstrumentsRepo() {
+  return {
+    findOne: jest.fn(),
   };
 }
 
@@ -186,6 +200,7 @@ async function buildService(): Promise<{
   service: ExecutionService;
   ordersRepo: ReturnType<typeof makeOrdersRepo>;
   executionsRepo: ReturnType<typeof makeExecutionsRepo>;
+  instrumentsRepo: ReturnType<typeof makeInstrumentsRepo>;
   dhanApiClient: ReturnType<typeof makeDhanApiClient>;
   riskManagementService: ReturnType<typeof makeRiskManagementService>;
   sessionManagerService: ReturnType<typeof makeSessionManagerService>;
@@ -195,6 +210,7 @@ async function buildService(): Promise<{
 }> {
   const ordersRepo = makeOrdersRepo();
   const executionsRepo = makeExecutionsRepo();
+  const instrumentsRepo = makeInstrumentsRepo();
   const dhanApiClient = makeDhanApiClient();
   const riskManagementService = makeRiskManagementService();
   const sessionManagerService = makeSessionManagerService();
@@ -207,6 +223,11 @@ async function buildService(): Promise<{
       ExecutionService,
       { provide: getRepositoryToken(Order), useValue: ordersRepo },
       { provide: getRepositoryToken(Execution), useValue: executionsRepo },
+      { provide: getRepositoryToken(Instruments), useValue: instrumentsRepo },
+      {
+        provide: getRepositoryToken(Position),
+        useValue: { findOne: jest.fn().mockResolvedValue(null) },
+      },
       { provide: DhanApiClient, useValue: dhanApiClient },
       { provide: RiskManagementService, useValue: riskManagementService },
       { provide: SessionManagerService, useValue: sessionManagerService },
@@ -220,6 +241,7 @@ async function buildService(): Promise<{
     service: module.get<ExecutionService>(ExecutionService),
     ordersRepo,
     executionsRepo,
+    instrumentsRepo,
     dhanApiClient,
     riskManagementService,
     sessionManagerService,
@@ -763,10 +785,12 @@ describe('ExecutionService', () => {
 
     it('calls DhanApiClient.placeOrder with correct parameters', async () => {
       const { mocks } = await runHappyPath();
+      // quantity must be UNITS (lots × lotSize). 2 lots × lotSize 50 = 100 units.
       const req = makeOrderRequest({
         securityId: '12345',
         transactionType: 'BUY',
-        quantity: 2,
+        quantity: 100, // 2 lots × lotSize 50 = 100 units
+        selectedLots: 2,
         price: 150,
       });
 
@@ -776,7 +800,7 @@ describe('ExecutionService', () => {
         expect.objectContaining({
           transactionType: 'BUY',
           securityId: '12345',
-          quantity: 2,
+          quantity: 100, // UNITS forwarded to Dhan, not lots
           price: 150,
           orderType: 'LIMIT',
           validity: 'DAY',
@@ -810,21 +834,26 @@ describe('ExecutionService', () => {
       const { mocks } = await runHappyPath();
       await mocks.service.placeOrder(makeOrderRequest({ idempotencyKey: 'my-idem-key-1234' }));
 
+      // DB record is created FIRST (status='pending') before broker submission
       expect(mocks.ordersRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           idempotency_key: 'my-idem-key-1234',
-          status: 'submitted',
+          status: 'pending', // intent written before broker call
+          dhan_order_id: null, // not yet known
+          submitted_at: null, // set after broker acknowledges
         }),
       );
-      expect(mocks.ordersRepo.save).toHaveBeenCalledTimes(1);
+      // save() is called twice: once for pending intent, once after broker ack
+      expect(mocks.ordersRepo.save).toHaveBeenCalledTimes(2);
     });
 
     it('sets submitted_at on the persisted order', async () => {
       const { mocks } = await runHappyPath();
       await mocks.service.placeOrder(makeOrderRequest());
 
-      const createArg = mocks.ordersRepo.create.mock.calls[0][0];
-      expect(createArg.submitted_at).toBeInstanceOf(Date);
+      // submitted_at is set on the second save (after broker acknowledgement)
+      const secondSaveArg = mocks.ordersRepo.save.mock.calls[1][0] as Order;
+      expect(secondSaveArg.submitted_at).toBeInstanceOf(Date);
     });
 
     it('passes all 5 phases between OPENING_VOLATILITY and AFTERNOON', async () => {
@@ -1160,5 +1189,146 @@ describe('ExecutionService', () => {
         NotFoundException,
       );
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Lot-size invariant tests (Requirement P0-CRIT-001)
+// ---------------------------------------------------------------------------
+
+describe('ExecutionService — lot-size quantity invariant', () => {
+  /**
+   * Sets up all pre-trade mocks to pass so the quantity validation is reached.
+   */
+  async function buildPassingMocks() {
+    const mocks = await buildService();
+    const { riskManagementService, dhanApiClient, sessionManagerService, ordersRepo } = mocks;
+
+    riskManagementService.evaluatePreEntryGates.mockReturnValue({
+      approved: true,
+      suggestedQuantity: 1,
+    });
+    dhanApiClient.getFundLimit.mockResolvedValue({
+      dhanClientId: 'TEST',
+      availabelBalance: 100000,
+      sodLimit: 200000,
+      collateralAmount: 0,
+      receiveableAmount: 0,
+      utilizedAmount: 0,
+      blockedPayoutAmount: 0,
+      withdrawableBalance: 100000,
+    });
+    ordersRepo.findOne.mockResolvedValue(null);
+    sessionManagerService.getCurrentPhase.mockReturnValue(SessionPhase.MORNING_MOMENTUM);
+    dhanApiClient.placeOrder.mockResolvedValue({
+      orderId: 'dhan-qty-test',
+      orderStatus: 'TRANSIT',
+    });
+    const saved = makeSavedOrder({ dhan_order_id: 'dhan-qty-test' });
+    ordersRepo.create.mockReturnValue(saved);
+    ordersRepo.save.mockResolvedValue(saved);
+
+    return mocks;
+  }
+
+  it('P0: rejects when quantity is 0', async () => {
+    const { service } = await buildPassingMocks();
+    const response = await service.placeOrder(makeOrderRequest({ quantity: 0, lotSize: 50 }));
+    expect(response.status).toBe('rejected');
+    expect(response.rejectionReason).toMatch(/invalid quantity/i);
+  });
+
+  it('P0: rejects when quantity is negative', async () => {
+    const { service } = await buildPassingMocks();
+    const response = await service.placeOrder(makeOrderRequest({ quantity: -50, lotSize: 50 }));
+    expect(response.status).toBe('rejected');
+  });
+
+  it('P0: rejects when quantity is not a multiple of lotSize (lots sent instead of units)', async () => {
+    const { service } = await buildPassingMocks();
+    // Classic bug: 1 lot sent as quantity=1 instead of quantity=75
+    const response = await service.placeOrder(makeOrderRequest({ quantity: 1, lotSize: 75 }));
+    expect(response.status).toBe('rejected');
+    expect(response.rejectionReason).toMatch(/multiple of lot size/i);
+  });
+
+  it('P0: rejects when quantity is 2 (lots) for lotSize=75 — not a valid multiple', async () => {
+    const { service } = await buildPassingMocks();
+    const response = await service.placeOrder(makeOrderRequest({ quantity: 2, lotSize: 75 }));
+    expect(response.status).toBe('rejected');
+    expect(response.rejectionReason).toMatch(/multiple of lot size/i);
+  });
+
+  it('P0: accepts 1 lot × lotSize=75 → quantity=75', async () => {
+    const { service, dhanApiClient } = await buildPassingMocks();
+    const response = await service.placeOrder(
+      makeOrderRequest({ quantity: 75, selectedLots: 1, lotSize: 75 }),
+    );
+    expect(response.status).toBe('submitted');
+    expect(dhanApiClient.placeOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ quantity: 75 }),
+    );
+  });
+
+  it('P0: accepts 2 lots × lotSize=75 → quantity=150', async () => {
+    const { service, dhanApiClient } = await buildPassingMocks();
+    const response = await service.placeOrder(
+      makeOrderRequest({ quantity: 150, selectedLots: 2, lotSize: 75 }),
+    );
+    expect(response.status).toBe('submitted');
+    expect(dhanApiClient.placeOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ quantity: 150 }),
+    );
+  });
+
+  it('P0: accepts 3 lots × lotSize=25 → quantity=75 (FINNIFTY-style)', async () => {
+    const { service, dhanApiClient } = await buildPassingMocks();
+    const response = await service.placeOrder(
+      makeOrderRequest({ quantity: 75, selectedLots: 3, lotSize: 25 }),
+    );
+    expect(response.status).toBe('submitted');
+    expect(dhanApiClient.placeOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ quantity: 75 }),
+    );
+  });
+
+  it('P0: invariant — Dhan API always receives quantityUnits divisible by lotSize', async () => {
+    // Property: for any valid (lots, lotSize) pair, quantity sent to Dhan = lots × lotSize
+    const cases: Array<{ lots: number; lotSize: number }> = [
+      { lots: 1, lotSize: 25 },
+      { lots: 1, lotSize: 50 },
+      { lots: 1, lotSize: 75 },
+      { lots: 2, lotSize: 25 },
+      { lots: 2, lotSize: 50 },
+      { lots: 2, lotSize: 100 },
+      { lots: 3, lotSize: 25 },
+      { lots: 5, lotSize: 15 },
+    ];
+
+    for (const { lots, lotSize } of cases) {
+      const mocks = await buildPassingMocks();
+      const quantityUnits = lots * lotSize;
+      const response = await mocks.service.placeOrder(
+        makeOrderRequest({ quantity: quantityUnits, selectedLots: lots, lotSize }),
+      );
+      expect(response.status).toBe('submitted');
+      expect(mocks.dhanApiClient.placeOrder).toHaveBeenCalledWith(
+        expect.objectContaining({ quantity: quantityUnits }),
+      );
+      // Invariant: quantity sent to Dhan is always a multiple of lotSize
+      const calledQty = mocks.dhanApiClient.placeOrder.mock.calls[0][0].quantity as number;
+      expect(calledQty % lotSize).toBe(0);
+      expect(calledQty).toBe(lots * lotSize);
+    }
+  });
+
+  it('P0: DB order.quantity stores UNITS (not lots)', async () => {
+    const { service, ordersRepo } = await buildPassingMocks();
+    // 2 lots × lotSize=50 = 100 units
+    await service.placeOrder(makeOrderRequest({ quantity: 100, selectedLots: 2, lotSize: 50 }));
+
+    // First create call should have quantity=100 (units)
+    const createArg = ordersRepo.create.mock.calls[0][0] as Partial<Order>;
+    expect(createArg.quantity).toBe(100);
   });
 });

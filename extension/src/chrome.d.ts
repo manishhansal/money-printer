@@ -4,6 +4,14 @@
  */
 declare const chrome: {
   storage: {
+    local: {
+      get(
+        keys: string | string[],
+        callback: (result: Record<string, unknown>) => void,
+      ): void;
+      set(items: Record<string, unknown>, callback?: () => void): void;
+      remove(keys: string | string[], callback?: () => void): void;
+    };
     session: {
       set(items: Record<string, unknown>, callback?: () => void): void;
       get(

@@ -545,3 +545,47 @@ export interface DhanPnlExitGetResponse {
   productType: Array<'INTRADAY' | 'DELIVERY'>;
   enable_kill_switch: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Margin Calculator (POST /v2/margincalculator)
+// ---------------------------------------------------------------------------
+
+/** Single instrument margin calculation request item. */
+export interface DhanMarginInstrument {
+  exchangeSegment: DhanExchangeSegment;
+  transactionType: DhanTransactionType;
+  quantity: number;
+  productType: DhanProductType;
+  securityId: string;
+  price: number;
+}
+
+/** Request body for POST /v2/margincalculator. */
+export interface DhanMarginCalculatorRequest {
+  dhanClientId: string;
+  instruments: DhanMarginInstrument[];
+}
+
+/** Response from POST /v2/margincalculator. */
+export interface DhanMarginCalculatorResponse {
+  dhanClientId: string;
+  totalMargin: number;
+  spanMargin: number;
+  exposureMargin: number;
+  availableBalance: number;
+  variableMargin: number;
+  insufficientBalance: boolean;
+  netMarginRequired: number;
+}
+
+// ---------------------------------------------------------------------------
+// Order by Correlation ID (GET /v2/orders/external/{correlationId})
+// ---------------------------------------------------------------------------
+
+/**
+ * Response from GET /v2/orders/external/{correlationId}.
+ * Returns the DhanOrder matching the client-assigned correlation ID.
+ * Used for crash-recovery: if a broker submission succeeded but the DB write
+ * failed, this endpoint recovers the Dhan order ID by correlationId.
+ */
+export type DhanOrderByCorrelationIdResponse = DhanOrder;

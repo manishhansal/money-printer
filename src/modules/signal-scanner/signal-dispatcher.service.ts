@@ -20,9 +20,13 @@ import { Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 
 import { Instruments } from '../../database/entities/instruments.entity';
+import { UserSettings } from '../../database/entities/user-settings.entity';
 import { PaperTradingService } from '../paper-trading/paper-trading.service';
 import { ExecutionService } from '../execution/execution.service';
 import { LiveTradingService } from '../live-trading/live-trading.service';
+import { PortfolioService } from '../portfolio/portfolio.service';
+import { DhanApiClient } from '../dhan/dhan-api.client';
+import { DhanExchangeSegment, DhanTransactionType } from '../dhan/dhan-api.types';
 import { SIGNAL_ACCEPTED_EVENT, SignalAcceptedEventPayload } from './signal-scanner.types';
 
 /** Map Instruments.exchange + segment → DhanExchangeSegment */
@@ -47,8 +51,12 @@ export class SignalDispatcherService {
     private readonly paperTradingService: PaperTradingService,
     private readonly executionService: ExecutionService,
     private readonly liveTradingService: LiveTradingService,
+    private readonly portfolioService: PortfolioService,
+    private readonly dhanApiClient: DhanApiClient,
     @InjectRepository(Instruments)
     private readonly instrumentsRepo: Repository<Instruments>,
+    @InjectRepository(UserSettings)
+    private readonly userSettingsRepo: Repository<UserSettings>,
   ) {}
 
   /**
@@ -105,6 +113,31 @@ export class SignalDispatcherService {
       return;
     }
 
+    // ── Look up instrument to get lot_size for unit conversion ───────────────
+    // positionSize in SignalAcceptedEventPayload is in LOTS (not units).
+    // PaperTradingService expects quantity in UNITS (lots × lot_size).
+    const instrument = await this.instrumentsRepo.findOne({
+      where: { id: payload.instrumentId },
+    });
+
+    if (!instrument) {
+      this.logger.error(
+        `[Dispatcher] PAPER signal=${payload.signalId}: instrument ${payload.instrumentId} not found — skipping`,
+      );
+      return;
+    }
+
+    if (!instrument.lotSize || instrument.lotSize <= 0) {
+      this.logger.error(
+        `[Dispatcher] PAPER signal=${payload.signalId}: instrument ${payload.instrumentId} ` +
+          `has invalid lot_size=${instrument.lotSize} — rejecting trade (Requirement P0-CRIT-003)`,
+      );
+      return;
+    }
+
+    // Convert lots → units.  Example: 2 lots × 75 (NIFTY) = 150 units.
+    const quantityUnits = payload.positionSize * instrument.lotSize;
+
     const result = await this.paperTradingService.submitPaperOrder({
       idempotencyKey,
       instrumentId: payload.instrumentId,
@@ -112,11 +145,14 @@ export class SignalDispatcherService {
       signalId: payload.signalId,
       transactionType: payload.direction as 'BUY' | 'SELL',
       orderType: 'MARKET',
-      quantity: payload.positionSize,
+      quantity: quantityUnits, // UNITS, not lots
+      lotSize: instrument.lotSize,
+      selectedLots: payload.positionSize,
       signalScore: payload.compositeScore,
-      // securityId is the Redis key suffix for mkt:snapshot:{securityId}.
-      // Without this, fetchMarketSnapshot would use the DB UUID and find nothing.
       marketDataKey: payload.securityId || undefined,
+      // Pass SL and target so paper positions monitor exits correctly.
+      stopLossPrice: payload.stopLossPrice,
+      targetPrice: payload.targetPrice,
       slippageConfig: { model: 'fixed_rupee', fixedRupee: 0.5 },
       latencyConfig: { distribution: 'normal', meanMs: 150 },
       rejectionProbability: 0,
@@ -125,7 +161,8 @@ export class SignalDispatcherService {
     if (result.status === 'complete') {
       this.logger.log(
         `[Dispatcher] PAPER order filled — orderId=${result.orderId} ` +
-          `fill=${result.fillPrice} latency=${result.simulatedLatencyMs}ms`,
+          `fill=${result.fillPrice} latency=${result.simulatedLatencyMs}ms ` +
+          `(${payload.positionSize} lots × ${instrument.lotSize} = ${quantityUnits} units)`,
       );
     } else {
       this.logger.warn(`[Dispatcher] PAPER order rejected — reason=${result.rejectionReason}`);
@@ -161,6 +198,83 @@ export class SignalDispatcherService {
       return;
     }
 
+    if (!instrument.lotSize || instrument.lotSize <= 0) {
+      this.logger.error(
+        `[Dispatcher] LIVE signal=${payload.signalId}: instrument ${payload.instrumentId} ` +
+          `has invalid lot_size=${instrument.lotSize} — rejecting trade (Requirement P0-CRIT-003)`,
+      );
+      return;
+    }
+
+    // positionSize in SignalAcceptedEventPayload is in LOTS; convert to UNITS.
+    // Example: 2 lots × 75 (NIFTY lot_size) = 150 units sent to Dhan API.
+    const quantityUnits = payload.positionSize * instrument.lotSize;
+
+    // ── Read live portfolio state from PortfolioService ───────────────────────
+    // These replace the previously hardcoded values ('100000.00', '0.00', 0).
+    const dynamicCapital = this.portfolioService.getDynamicCapital('LIVE');
+    const openPositions = this.portfolioService.getOpenPositions('LIVE');
+
+    // Load riskPercentage from UserSettings (not hardcoded).
+    const settings = await this.userSettingsRepo.findOne({ where: {} });
+    const riskPercentage = settings?.defaultRiskPercentage ?? '1.0000';
+
+    // Total notional exposure across all open LIVE positions (entryPrice × units).
+    const currentTotalExposure = openPositions
+      .reduce((sum, p) => sum + parseFloat(p.average_entry_price) * p.quantity, 0)
+      .toFixed(2);
+
+    // Correlated (same underlying) exposure.
+    const currentCorrelatedExposure = openPositions
+      .filter((p) => p.instrument_id !== payload.instrumentId)
+      // We approximate correlated = same underlying by checking if the instrument
+      // is different from the signal's target. A fuller implementation would join
+      // instrument metadata; this is a safe conservative overestimate.
+      .reduce((sum, p) => sum + parseFloat(p.average_entry_price) * p.quantity, 0)
+      .toFixed(2);
+
+    // Single-instrument concentration exposure.
+    const currentInstrumentExposure = openPositions
+      .filter((p) => p.instrument_id === payload.instrumentId)
+      .reduce((sum, p) => sum + parseFloat(p.average_entry_price) * p.quantity, 0)
+      .toFixed(2);
+
+    // requiredMargin: query Dhan margin calculator (Phase 10 — P2-MED-002 fix).
+    // Falls back to price × units approximation if the API call fails so a
+    // transient Dhan error never blocks an otherwise valid LIVE trade.
+    let requiredMargin = parseFloat(payload.entryPrice) * quantityUnits;
+    try {
+      const marginResp = await this.dhanApiClient.calculateMargin({
+        dhanClientId: '', // resolved internally by DhanApiClient from SecretsService
+        instruments: [
+          {
+            exchangeSegment: toDhanSegment(
+              instrument.exchange,
+              instrument.segment,
+            ) as DhanExchangeSegment,
+            transactionType: payload.direction as DhanTransactionType,
+            quantity: quantityUnits,
+            productType: 'INTRADAY',
+            securityId: instrument.securityId,
+            price: parseFloat(payload.entryPrice),
+          },
+        ],
+      });
+      if (typeof marginResp?.netMarginRequired === 'number' && marginResp.netMarginRequired > 0) {
+        requiredMargin = marginResp.netMarginRequired;
+        this.logger.debug(
+          `[Dispatcher] Dhan margin for ${instrument.securityId}: ₹${requiredMargin.toFixed(2)} ` +
+            `(span=₹${marginResp.spanMargin} exposure=₹${marginResp.exposureMargin})`,
+        );
+      }
+    } catch (err) {
+      this.logger.warn(
+        `[Dispatcher] calculateMargin failed for ${instrument.securityId} — ` +
+          `using price×qty approximation: ₹${requiredMargin.toFixed(2)}. ` +
+          `Error: ${(err as Error).message}`,
+      );
+    }
+
     const result = await this.executionService.placeOrder({
       idempotencyKey: uuidv4(),
       engine: 'LIVE',
@@ -172,17 +286,18 @@ export class SignalDispatcherService {
       productType: 'INTRADAY',
       orderType: 'MARKET',
       transactionType: payload.direction as 'BUY' | 'SELL',
-      quantity: payload.positionSize,
+      quantity: quantityUnits, // UNITS — not lots
+      selectedLots: payload.positionSize,
       entryPrice: payload.entryPrice,
       stopLossPrice: payload.stopLossPrice,
       lotSize: instrument.lotSize,
-      dynamicCapital: '100000.00',
-      riskPercentage: '1.00',
-      currentTotalExposure: '0.00',
-      currentCorrelatedExposure: '0.00',
-      currentInstrumentExposure: '0.00',
-      openPositionsCount: 0,
-      requiredMargin: parseFloat(payload.entryPrice) * payload.positionSize * instrument.lotSize,
+      dynamicCapital, // real value from PortfolioService
+      riskPercentage, // from UserSettings (was hardcoded '1.00')
+      currentTotalExposure, // computed from open positions
+      currentCorrelatedExposure, // computed from open positions
+      currentInstrumentExposure, // computed from open positions
+      openPositionsCount: openPositions.length,
+      requiredMargin,
     });
 
     if (result.status === 'submitted') {

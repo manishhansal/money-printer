@@ -7,7 +7,7 @@
  */
 
 /**
- * All 8 recognised NSE trading session phases plus MARKET_CLOSED for
+ * All 9 recognised NSE trading session phases plus MARKET_CLOSED for
  * timestamps that fall outside the 09:00–16:00 IST trading window.
  *
  * Phase boundaries (IST = UTC+05:30):
@@ -17,9 +17,17 @@
  *   MORNING_MOMENTUM      09:30 – 11:00
  *   MID_SESSION           11:00 – 13:00
  *   AFTERNOON             13:00 – 14:30
- *   CLOSING               14:30 – 15:30
+ *   AFTERNOON_LATE        14:30 – 15:00  (entries still allowed, no new scalping)
+ *   CLOSING               15:00 – 15:30  (new entries blocked; mandatory square-off at 15:15)
  *   EOD_RECONCILIATION    15:30 – 16:00
  *   MARKET_CLOSED         outside 09:00–16:00
+ *
+ * Per trading directive (requirements):
+ *   - 15:00 IST → CLOSING phase begins, all new entries blocked
+ *   - 15:10 IST → final entry cutoff cron fires (belt-and-suspenders)
+ *   - 15:15 IST → mandatory square-off cron fires
+ *   - 15:25 IST → flat-position verification
+ *   - 15:28 IST → critical alert if any positions remain
  */
 export enum SessionPhase {
   PRE_MARKET = 'PRE_MARKET',
@@ -28,6 +36,8 @@ export enum SessionPhase {
   MORNING_MOMENTUM = 'MORNING_MOMENTUM',
   MID_SESSION = 'MID_SESSION',
   AFTERNOON = 'AFTERNOON',
+  /** 14:30–15:00 IST — entries still allowed; positions should be monitored for exit. */
+  AFTERNOON_LATE = 'AFTERNOON_LATE',
   CLOSING = 'CLOSING',
   EOD_RECONCILIATION = 'EOD_RECONCILIATION',
   MARKET_CLOSED = 'MARKET_CLOSED',

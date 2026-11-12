@@ -24,11 +24,14 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { Order } from '../../database/entities/orders.entity';
 import { Execution } from '../../database/entities/executions.entity';
+import { Instruments } from '../../database/entities/instruments.entity';
+import { Position } from '../../database/entities/positions.entity';
 import { DhanApiModule } from '../dhan/dhan-api.module';
 import { RiskManagementModule } from '../risk-management/risk-management.module';
 import { SessionManagerModule } from '../session-manager/session-manager.module';
 import { LiveTradingModule } from '../live-trading/live-trading.module';
 import { ExecutionService } from './execution.service';
+import { OrdersController } from './orders.controller';
 
 @Module({
   imports: [
@@ -45,10 +48,11 @@ import { ExecutionService } from './execution.service';
     // (Requirements 11.1, 11.3 — LIVE orders must not be submitted when DISARMED).
     LiveTradingModule,
 
-    // Registers Orders and Executions TypeORM repositories.
-    TypeOrmModule.forFeature([Order, Execution]),
+    // Registers Orders, Executions, Instruments, and Positions TypeORM repositories.
+    TypeOrmModule.forFeature([Order, Execution, Instruments, Position]),
   ],
   providers: [ExecutionService],
+  controllers: [OrdersController],
   exports: [ExecutionService],
 })
 export class ExecutionModule {}

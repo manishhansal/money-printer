@@ -32,6 +32,9 @@ import { ReconciliationModule } from './modules/reconciliation/reconciliation.mo
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { ComplianceModule } from './modules/compliance/compliance.module';
 import { SignalScannerModule } from './modules/signal-scanner/signal-scanner.module';
+import { OrderStatusPollerModule } from './modules/dhan/order-status-poller.module';
+import { DebugModule } from './modules/debug/debug.module';
+import { BacktestModule } from './modules/backtest/backtest.module';
 
 /**
  * Root application module.
@@ -171,6 +174,15 @@ import { SignalScannerModule } from './modules/signal-scanner/signal-scanner.mod
     // and routes accepted signals (score ≥ 80) to paper/live execution.
     // Closes the missing pipeline link: market data → signals → trades.
     SignalScannerModule,
+
+    // Order Status Poller — polls Dhan every 15s to detect FILLED/REJECTED orders.
+    OrderStatusPollerModule,
+
+    // Debug — provides /debug/stats and /debug/scan for the dashboard diagnostics panel.
+    DebugModule,
+
+    // Backtest — POST /backtest/run, GET /backtest/charges, GET /backtest/historical.
+    BacktestModule,
 
     // Redis channel wiring — bridges events:regime_change and events:session_phase
     // pub/sub channels to in-process service handlers; also ensures

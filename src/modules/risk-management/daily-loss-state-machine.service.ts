@@ -82,6 +82,15 @@ export class DailyLossStateMachineService {
     ['PAPER', 0],
   ]);
 
+  /**
+   * Most recently reported total intraday loss per engine (in rupees).
+   * Updated by onIntradayLossUpdate(); reset to 0 at midnight.
+   */
+  private readonly currentDailyLossRupees = new Map<EngineType, number>([
+    ['LIVE', 0],
+    ['PAPER', 0],
+  ]);
+
   constructor(
     @InjectRepository(RiskEvents)
     private readonly riskEventsRepo: Repository<RiskEvents>,
@@ -100,6 +109,22 @@ export class DailyLossStateMachineService {
    */
   getCurrentState(engine: EngineType): DailyLossState {
     return this.state.get(engine) ?? 'NORMAL';
+  }
+
+  /**
+   * Returns the number of losing trades recorded today for the given engine.
+   * Resets to zero at midnight IST with resetDailyState().
+   */
+  getLosingTradeCount(engine: EngineType): number {
+    return this.losingTradeCount.get(engine) ?? 0;
+  }
+
+  /**
+   * Returns the most recently reported total intraday loss in rupees for the
+   * given engine. Updated by onIntradayLossUpdate(); resets to 0 at midnight.
+   */
+  getCurrentDailyLoss(engine: EngineType): number {
+    return this.currentDailyLossRupees.get(engine) ?? 0;
   }
 
   /**
@@ -165,6 +190,8 @@ export class DailyLossStateMachineService {
    * Requirements: 9.4
    */
   async onIntradayLossUpdate(engine: EngineType, totalLossRupees: number): Promise<void> {
+    // Track latest reported value for getCurrentDailyLoss().
+    this.currentDailyLossRupees.set(engine, totalLossRupees);
     const currentState = this.getCurrentState(engine);
 
     // EMERGENCY_HALT and KILL_SWITCH_ACTIVE are already terminal (for the day)
@@ -231,10 +258,11 @@ export class DailyLossStateMachineService {
         this.logger.log(`[${engine}] Daily state reset: ${currentState} → NORMAL at 00:00 IST`);
       }
 
-      // Always reset the losing-trade counter at midnight so the new day
+      // Always reset the losing-trade counter and daily loss at midnight so the new day
       // starts fresh (applicable to both NORMAL and formerly-locked states).
       if (currentState !== 'KILL_SWITCH_ACTIVE') {
         this.losingTradeCount.set(engine, 0);
+        this.currentDailyLossRupees.set(engine, 0);
       }
     }
   }

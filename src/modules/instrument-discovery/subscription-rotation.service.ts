@@ -143,6 +143,12 @@ export class SubscriptionRotationService implements OnModuleInit {
       'SubscriptionRotation: WebSocket connected — triggering immediate subscription bootstrap',
     );
 
+    // Always subscribe NIFTY (13), BANKNIFTY (25), FINNIFTY (27) index
+    // instruments on IDX_I segment regardless of market hours.
+    // These are needed for MarketRegimeService to classify regime from LTP.
+    this.dhanWebSocketClient.subscribe([13, 25, 27], 'IDX_I');
+    this.logger.log('SubscriptionRotation: subscribed NIFTY/BANKNIFTY/FINNIFTY index (IDX_I)');
+
     void this.updateLiquidityRankings().catch((err: Error) => {
       this.logger.error(
         `SubscriptionRotation: initial subscription bootstrap failed: ${err.message}`,
