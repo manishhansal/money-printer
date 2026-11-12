@@ -5,29 +5,20 @@
 declare const chrome: {
   storage: {
     local: {
-      get(
-        keys: string | string[],
-        callback: (result: Record<string, unknown>) => void,
-      ): void;
+      get(keys: string | string[], callback: (result: Record<string, unknown>) => void): void;
       set(items: Record<string, unknown>, callback?: () => void): void;
       remove(keys: string | string[], callback?: () => void): void;
     };
     session: {
       set(items: Record<string, unknown>, callback?: () => void): void;
-      get(
-        keys: string | string[],
-        callback: (result: Record<string, unknown>) => void,
-      ): void;
+      get(keys: string | string[], callback: (result: Record<string, unknown>) => void): void;
       remove(keys: string | string[], callback?: () => void): void;
     };
   };
   runtime: {
     lastError: { message: string } | undefined;
     sendMessage(message: unknown): void;
-    sendMessage<T = unknown>(
-      message: unknown,
-      callback?: (response: T) => void,
-    ): void;
+    sendMessage<T = unknown>(message: unknown, callback?: (response: T) => void): void;
     onInstalled: { addListener(callback: () => void | Promise<void>): void };
     onStartup: { addListener(callback: () => void | Promise<void>): void };
     /** Fired when a message is sent from an extension process or a content script. */

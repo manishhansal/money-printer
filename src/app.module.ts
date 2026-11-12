@@ -34,6 +34,8 @@ import { ComplianceModule } from './modules/compliance/compliance.module';
 import { SignalScannerModule } from './modules/signal-scanner/signal-scanner.module';
 import { OrderStatusPollerModule } from './modules/dhan/order-status-poller.module';
 import { DebugModule } from './modules/debug/debug.module';
+import { WatchdogModule } from './modules/watchdog/watchdog.module';
+import { AgentsModule } from './modules/agents/agents.module';
 import { BacktestModule } from './modules/backtest/backtest.module';
 
 /**
@@ -183,6 +185,16 @@ import { BacktestModule } from './modules/backtest/backtest.module';
 
     // Backtest — POST /backtest/run, GET /backtest/charges, GET /backtest/historical.
     BacktestModule,
+
+    // Watchdog — continuous local market monitoring, issue registry, and
+    // safe auto-remediation (Phase 16). Runs in a separate execution lane
+    // and never blocks the critical order-submission path.
+    WatchdogModule,
+
+    // Agents — multi-agent intelligence engine (Phase 3-4). Runs research
+    // workflows with 15 agents in 6 phases. Falls back to rule-based analysis
+    // when LLM_PROVIDER=disabled. Never blocks execution path.
+    AgentsModule,
 
     // Redis channel wiring — bridges events:regime_change and events:session_phase
     // pub/sub channels to in-process service handlers; also ensures

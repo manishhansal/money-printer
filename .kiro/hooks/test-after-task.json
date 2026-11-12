@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Run Tests After Task Completion",
+      "trigger": "PostTaskExec",
+      "action": {
+        "type": "command",
+        "command": "cd /Users/manishkumar/Desktop/money-printer && npx jest --no-coverage --runInBand --passWithNoTests 2>&1 | tail -15",
+        "timeout": 120
+      }
+    }
+  ]
+}

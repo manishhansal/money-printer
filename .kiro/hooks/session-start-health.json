@@ -1,0 +1,13 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Session Start Health Check",
+      "trigger": "SessionStart",
+      "action": {
+        "type": "agent",
+        "prompt": "A new Kiro session has started on the MoneyPrinter project. Run these startup checks:\n\n1. **TypeScript health**: `cd /Users/manishkumar/Desktop/money-printer && npx tsc --noEmit 2>&1 | head -20`\n\n2. **Test suite status**: `cd /Users/manishkumar/Desktop/money-printer && npx jest --no-coverage --runInBand --passWithNoTests 2>&1 | tail -10`\n\n3. **Open issues summary**: `cd /Users/manishkumar/Desktop/money-printer && curl -s --max-time 2 http://localhost:3002/watchdog/issues/counts 2>/dev/null || echo \"Server not running\"`\n\n4. **Git status**: `cd /Users/manishkumar/Desktop/money-printer && git status --short 2>&1 | head -20`\n\nReport as:\n```\n🚀 MoneyPrinter Session Start\n✓/❌ TypeScript: clean / N errors\n✓/❌ Tests: N passing / M failing\n📊 Open Issues: P0=N, P1=N, P2=N, P3=N (or server not running)\n📝 Git: N modified files\n```\n\nIf there are P0 issues or TypeScript errors, flag them prominently before proceeding with any user request."
+      }
+    }
+  ]
+}

@@ -140,10 +140,7 @@ export function updateSignalFeed(newSignals: Signal[]): void {
   }
 
   signalFeed = Array.from(feedMap.values())
-    .sort(
-      (a, b) =>
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
-    )
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
     .slice(0, MAX_SIGNAL_FEED_SIZE);
 
   renderSignalFeed();
@@ -205,31 +202,29 @@ export function subscribeToPositionUpdates(): void {
     return;
   }
 
-  chrome.runtime.onMessage.addListener(
-    (message: { type: string; payload: unknown }) => {
-      switch (message.type) {
-        case 'POSITION_UPDATE':
-          updatePosition(message.payload as Position);
-          break;
+  chrome.runtime.onMessage.addListener((message: { type: string; payload: unknown }) => {
+    switch (message.type) {
+      case 'POSITION_UPDATE':
+        updatePosition(message.payload as Position);
+        break;
 
-        case 'SIGNAL_UPDATE':
-          updateSignalFeed([message.payload as Signal]);
-          break;
+      case 'SIGNAL_UPDATE':
+        updateSignalFeed([message.payload as Signal]);
+        break;
 
-        case 'ALERT':
-          addToAlertQueue(message.payload as Alert);
-          break;
+      case 'ALERT':
+        addToAlertQueue(message.payload as Alert);
+        break;
 
-        case 'ALERT_ACK':
-          acknowledgeAlert((message.payload as { alertId: string }).alertId);
-          break;
+      case 'ALERT_ACK':
+        acknowledgeAlert((message.payload as { alertId: string }).alertId);
+        break;
 
-        default:
-          // Unrecognised message type — no-op.
-          break;
-      }
-    },
-  );
+      default:
+        // Unrecognised message type — no-op.
+        break;
+    }
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -269,8 +264,7 @@ export function renderPositionsTable(): void {
   tbody.innerHTML = Array.from(positions.values())
     .map((p) => {
       const pnlClass = getPnlColorClass(p.unrealizedPnl);
-      const dirClass =
-        p.direction === 'LONG' ? 'direction-long' : 'direction-short';
+      const dirClass = p.direction === 'LONG' ? 'direction-long' : 'direction-short';
       return `
         <tr data-position-id="${escapeHtml(p.id)}">
           <td>${escapeHtml(p.symbol)}</td>

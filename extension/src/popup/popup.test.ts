@@ -231,26 +231,17 @@ describe('Popup UI — ARM/DISARM two-step flow', () => {
 describe('Popup button message dispatch', () => {
   it('handleActivate sends REQUEST_ARM to the BSW', () => {
     handleActivate();
-    expect(sendMessageMock).toHaveBeenCalledWith(
-      { type: 'REQUEST_ARM' },
-      expect.any(Function),
-    );
+    expect(sendMessageMock).toHaveBeenCalledWith({ type: 'REQUEST_ARM' }, expect.any(Function));
   });
 
   it('handleConfirm sends CONFIRM_ARM to the BSW', () => {
     handleConfirm();
-    expect(sendMessageMock).toHaveBeenCalledWith(
-      { type: 'CONFIRM_ARM' },
-      expect.any(Function),
-    );
+    expect(sendMessageMock).toHaveBeenCalledWith({ type: 'CONFIRM_ARM' }, expect.any(Function));
   });
 
   it('handleDisarm sends DISARM to the BSW', () => {
     handleDisarm();
-    expect(sendMessageMock).toHaveBeenCalledWith(
-      { type: 'DISARM' },
-      expect.any(Function),
-    );
+    expect(sendMessageMock).toHaveBeenCalledWith({ type: 'DISARM' }, expect.any(Function));
   });
 });
 

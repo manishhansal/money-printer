@@ -116,8 +116,7 @@ export async function recoverState(timeoutMs: number = RECOVERY_TIMEOUT_MS): Pro
 export function connectWebSocket(url: string = DEFAULT_WSS_URL): WebSocket | null {
   if (
     activeSocket &&
-    (activeSocket.readyState === WebSocket.OPEN ||
-      activeSocket.readyState === WebSocket.CONNECTING)
+    (activeSocket.readyState === WebSocket.OPEN || activeSocket.readyState === WebSocket.CONNECTING)
   ) {
     // Already connected or connecting — reuse
     return activeSocket;
@@ -132,7 +131,9 @@ export function connectWebSocket(url: string = DEFAULT_WSS_URL): WebSocket | nul
   activeSocket = socket;
 
   socket.addEventListener('open', () => {
-    updateState({ connectionState: 'connected' }).catch(() => {/* ignore */});
+    updateState({ connectionState: 'connected' }).catch(() => {
+      /* ignore */
+    });
     // Start polling for signals now that the connection is live
     startSignalPolling();
   });
@@ -163,7 +164,9 @@ export function connectWebSocket(url: string = DEFAULT_WSS_URL): WebSocket | nul
     if (activeSocket === socket) {
       activeSocket = null;
     }
-    updateState({ connectionState: 'disconnected' }).catch(() => {/* ignore */});
+    updateState({ connectionState: 'disconnected' }).catch(() => {
+      /* ignore */
+    });
     stopSignalPolling();
     // Reconnect after delay
     setTimeout(() => connectWebSocket(url), RECONNECT_DELAY_MS);
@@ -173,7 +176,9 @@ export function connectWebSocket(url: string = DEFAULT_WSS_URL): WebSocket | nul
     if (activeSocket === socket) {
       activeSocket = null;
     }
-    updateState({ connectionState: 'disconnected' }).catch(() => {/* ignore */});
+    updateState({ connectionState: 'disconnected' }).catch(() => {
+      /* ignore */
+    });
     stopSignalPolling();
   });
 
@@ -334,9 +339,7 @@ async function fetchAndBroadcastPositions(): Promise<void> {
     for (const p of positions) {
       const entryPrice = parseFloat(p.average_entry_price);
       const unrealized = parseFloat(p.unrealized_pnl);
-      const currentPrice = unrealized !== 0
-        ? entryPrice + unrealized / p.quantity
-        : entryPrice;
+      const currentPrice = unrealized !== 0 ? entryPrice + unrealized / p.quantity : entryPrice;
 
       const payload = {
         id: p.id,

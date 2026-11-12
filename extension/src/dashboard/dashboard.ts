@@ -99,9 +99,7 @@ export function resetDashboardState(): void {
  * Sorts regime heatmap entries by signalCount descending.
  * Returns a new sorted array; does not mutate the input.
  */
-export function sortRegimeHeatmap(
-  entries: RegimeHeatmapEntry[],
-): RegimeHeatmapEntry[] {
+export function sortRegimeHeatmap(entries: RegimeHeatmapEntry[]): RegimeHeatmapEntry[] {
   return [...entries].sort((a, b) => b.signalCount - a.signalCount);
 }
 
@@ -113,9 +111,7 @@ export function sortRegimeHeatmap(
  *  isStale === true  → 'options-flow-stale'
  *  isStale === false → ''
  */
-export function getOptionsFlowStaleClass(
-  isStale: boolean,
-): 'options-flow-stale' | '' {
+export function getOptionsFlowStaleClass(isStale: boolean): 'options-flow-stale' | '' {
   return isStale ? 'options-flow-stale' : '';
 }
 
@@ -173,10 +169,7 @@ export function getAlerts(): AlertItem[] {
  * Unknown message types are silently ignored (no-op) to future-proof against
  * new CloudEngine event types.
  */
-export function handleWebSocketMessage(msg: {
-  type: string;
-  payload: unknown;
-}): void {
+export function handleWebSocketMessage(msg: { type: string; payload: unknown }): void {
   switch (msg.type) {
     case 'PERFORMANCE_UPDATE':
       strategyPerformance = msg.payload as PerformanceRow[];
