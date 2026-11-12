@@ -92,6 +92,21 @@ export class MarketDataCacheService {
     this.cacheMarketSnapshot(instrumentId, snapshot).catch((err: Error) => {
       this.logger.error(`Failed to cache snapshot for ${instrumentId}: ${err.message}`);
     });
+
+    // Track day-open price: store the FIRST LTP of each trading day per
+    // instrument so downstream callers can compute intraday change %.
+    // Key: `mkt:dayopen:{instrumentId}` — TTL 86400 s (auto-clears overnight).
+    this.redisService
+      .get(`mkt:dayopen:${instrumentId}`)
+      .then((existing) => {
+        if (!existing) {
+          return this.redisService.set(`mkt:dayopen:${instrumentId}`, snapshot.ltp, 86_400);
+        }
+        return Promise.resolve();
+      })
+      .catch(() => {
+        /* non-fatal — skip on Redis error */
+      });
   }
 
   // --------------------------------------------------------------------------

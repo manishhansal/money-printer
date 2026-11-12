@@ -49,6 +49,22 @@ export interface GreekValues {
   theta: number;
   /** Vega: sensitivity to implied-volatility change (≥ 0). */
   vega: number;
+  /** Implied volatility (fractional, e.g. 0.25 = 25%). */
+  iv: number;
+  /** Last traded price of this option contract. */
+  ltp: number;
+  /** Best bid price. */
+  bidPrice: number;
+  /** Best ask price. */
+  askPrice: number;
+  /** Quantity available at best bid. */
+  bidQty: number;
+  /** Quantity available at best ask. */
+  askQty: number;
+  /** Open interest (number of outstanding contracts). */
+  oi: number;
+  /** Total traded volume for the day. */
+  volume: number;
   /** Wall-clock time at which these Greeks were fetched. */
   computedAt: Date;
   /** Dhan security ID of the options contract this record belongs to. */
