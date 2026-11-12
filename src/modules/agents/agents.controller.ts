@@ -143,13 +143,21 @@ export class AgentsController {
   /**
    * GET /agents/status
    * Returns current LLM provider configuration (no secrets exposed).
+   *
+   * availabilityStatus breakdown:
+   *   DISABLED            — rule-based mode, no API calls
+   *   CREDENTIALS_MISSING — provider configured but API key absent
+   *   CONFIGURED          — key present, connectivity not verified
    */
   @Get('status')
-  getStatus() {
+  async getStatus() {
+    const availabilityStatus = await this.llm.getAvailabilityStatus();
     return {
       provider: this.llm.getProvider(),
-      available: this.llm.isAvailable(),
-      fallbackMode: !this.llm.isAvailable() ? 'rule-based analysis' : null,
+      availabilityStatus,
+      /** @deprecated use availabilityStatus instead */
+      available: availabilityStatus === 'CONFIGURED',
+      fallbackMode: availabilityStatus !== 'CONFIGURED' ? 'rule-based analysis' : null,
     };
   }
 }
