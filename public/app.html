@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MoneyPrinter — Quantitative Trading Terminal</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+      background: #0b0d12;
+      color: #dde4f0;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 12px;
+      overflow-x: hidden;
+    }
+    #root { min-height: 100vh; }
+    /* Keyframes used by LiveControls pending state */
+    @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.6 } }
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: #0b0d12; }
+    ::-webkit-scrollbar-thumb { background: #1a2235; border-radius: 2px; }
+    ::-webkit-scrollbar-thumb:hover { background: #2a3245; }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <!-- Loading skeleton shown before React hydrates -->
+    <div style="display:flex;align-items:center;justify-content:center;height:100vh;
+                font-family:monospace;color:#4b6080;font-size:14px;letter-spacing:2px">
+      ⚡ MONEYPRINTER — Loading…
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
