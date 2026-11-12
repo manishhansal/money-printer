@@ -200,22 +200,50 @@ export class LocalMarketWatchdogService implements OnModuleInit, OnModuleDestroy
     const now = new Date();
     const checks: HealthCheckResult[] = [];
 
-    // Run all checks in parallel with individual error isolation
-    const checkFunctions = [
-      this.checkBackendHealth.bind(this),
-      this.checkRedisHealth.bind(this),
-      this.checkPostgresHealth.bind(this),
-      this.checkDhanConnectivity.bind(this),
-      this.checkMarketDataFreshness.bind(this),
-      this.checkInstrumentMasterFreshness.bind(this),
-      this.checkOptionsChainFreshness.bind(this),
-      this.checkSignalScannerActivity.bind(this),
-      this.checkOpenPositionProtection.bind(this),
-      this.checkDailyRiskState.bind(this),
-      this.checkSquareOffReadiness.bind(this),
+    /** Per-check timeout — prevents a single hanging check from blocking the watchdog. */
+    const CHECK_TIMEOUT_MS = 5_000;
+
+    /**
+     * Wraps a check function with an individual timeout so that one slow or
+     * permanently-hanging check cannot stall the entire health-check cycle.
+     * Resolves to an UNKNOWN result if the timeout fires.
+     */
+    const withTimeout = (
+      name: string,
+      fn: (now: Date) => Promise<HealthCheckResult>,
+    ): Promise<HealthCheckResult> => {
+      let handle: ReturnType<typeof setTimeout>;
+      const timeoutPromise = new Promise<HealthCheckResult>((resolve) => {
+        handle = setTimeout(() => {
+          resolve({
+            component: name,
+            healthy: false,
+            details: `Check timed out after ${CHECK_TIMEOUT_MS}ms — status UNKNOWN`,
+            checkedAt: now,
+          });
+        }, CHECK_TIMEOUT_MS);
+      });
+      return Promise.race([fn(now), timeoutPromise]).finally(() => clearTimeout(handle));
+    };
+
+    // Run all checks in parallel with individual error isolation + timeouts
+    const checkFunctions: Array<[string, (now: Date) => Promise<HealthCheckResult>]> = [
+      ['backend', this.checkBackendHealth.bind(this)],
+      ['redis', this.checkRedisHealth.bind(this)],
+      ['postgresql', this.checkPostgresHealth.bind(this)],
+      ['dhan', this.checkDhanConnectivity.bind(this)],
+      ['market_data', this.checkMarketDataFreshness.bind(this)],
+      ['instrument_master', this.checkInstrumentMasterFreshness.bind(this)],
+      ['options_chain', this.checkOptionsChainFreshness.bind(this)],
+      ['signal_scanner', this.checkSignalScannerActivity.bind(this)],
+      ['position_protection', this.checkOpenPositionProtection.bind(this)],
+      ['daily_risk', this.checkDailyRiskState.bind(this)],
+      ['square_off', this.checkSquareOffReadiness.bind(this)],
     ];
 
-    const results = await Promise.allSettled(checkFunctions.map((fn) => fn(now)));
+    const results = await Promise.allSettled(
+      checkFunctions.map(([name, fn]) => withTimeout(name, fn)),
+    );
 
     for (const result of results) {
       if (result.status === 'fulfilled') {
