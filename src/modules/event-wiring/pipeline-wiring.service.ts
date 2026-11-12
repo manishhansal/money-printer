@@ -32,6 +32,10 @@ import { SignalScoringService } from '../signal-scoring/signal-scoring.service';
 import { DailyLossStateMachineService } from '../risk-management/daily-loss-state-machine.service';
 import { SIGNAL_CANDIDATE_EVENT, SignalCandidateEventPayload } from '../strategy/strategy.types';
 import { UNREALIZED_PNL_UPDATED_EVENT } from '../position-monitoring/position-monitoring.types';
+import {
+  PAPER_TRADE_CLOSED_EVENT,
+  PaperTradeClosedPayload,
+} from '../paper-trading/paper-trading.service';
 import { SignalInput } from '../signal-scoring/signal-scoring.types';
 import {
   SIGNAL_ACCEPTED_EVENT,
@@ -208,6 +212,27 @@ export class PipelineWiringService implements OnModuleInit {
         `[${UNREALIZED_PNL_UPDATED_EVENT}] onIntradayLossUpdate threw an error: ` +
           `${(err as Error).message}`,
         (err as Error).stack,
+      );
+    }
+  }
+
+  /**
+   * Handle a closed paper trade event.
+   *
+   * Calls `DailyLossStateMachineService.onTradeClosed('PAPER', netPnl)` so that
+   * the two-losing-trade lockout rule is correctly enforced for paper trades.
+   * Emitted by PaperTradingService when updatePosition() closes a position.
+   */
+  @OnEvent(PAPER_TRADE_CLOSED_EVENT)
+  async handlePaperTradeClosed(payload: PaperTradeClosedPayload): Promise<void> {
+    try {
+      await this.dailyLossStateMachineService.onTradeClosed(payload.engine, payload.netPnl);
+      this.logger.debug(
+        `[${PAPER_TRADE_CLOSED_EVENT}] onTradeClosed(PAPER, ${payload.netPnl}) processed`,
+      );
+    } catch (err) {
+      this.logger.error(
+        `[${PAPER_TRADE_CLOSED_EVENT}] onTradeClosed threw: ${(err as Error).message}`,
       );
     }
   }
