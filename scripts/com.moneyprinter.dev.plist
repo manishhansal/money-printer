@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  com.moneyprinter.dev.plist
+  launchd plist for auto-starting MoneyPrinter before 09:15 AM IST (03:45 UTC).
+
+  INSTALL:
+    cp scripts/com.moneyprinter.dev.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.moneyprinter.dev.plist
+
+  UNINSTALL:
+    launchctl unload ~/Library/LaunchAgents/com.moneyprinter.dev.plist
+    rm ~/Library/LaunchAgents/com.moneyprinter.dev.plist
+
+  LOGS:
+    tail -f /tmp/moneyprinter-dev.log
+    tail -f /tmp/moneyprinter-dev-error.log
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.moneyprinter.dev</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/manishkumar/Desktop/money-printer/scripts/start-dev.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/manishkumar/Desktop/money-printer</string>
+
+    <!-- Start at 03:30 UTC = 09:00 AM IST (15 min before instrument discovery cron) -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>3</integer>
+        <key>Minute</key>
+        <integer>30</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/moneyprinter-dev.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/moneyprinter-dev-error.log</string>
+
+    <!-- Restart automatically if it crashes -->
+    <key>KeepAlive</key>
+    <false/>
+
+    <!-- Run at load time too (useful for testing) -->
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+    </dict>
+</dict>
+</plist>
