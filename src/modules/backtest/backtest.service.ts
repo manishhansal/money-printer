@@ -29,6 +29,8 @@ import {
   BacktestMetrics,
   ConfidenceInterval,
   TradingCosts,
+  AblationResult,
+  AblationVariant,
 } from './backtest.types';
 
 @Injectable()
@@ -181,6 +183,76 @@ export class BacktestService {
    */
   calculateTradingCosts(entryPrice: number, exitPrice: number, quantity: number): TradingCosts {
     return this.chargesService.calculate(entryPrice, exitPrice, quantity);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Public API — Ablation Analysis
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Run a strategy ablation analysis on a set of historical trades.
+   *
+   * Ablation systematically excludes one dimension value at a time
+   * (regime or instrument) and measures the performance of the remaining
+   * trades vs the baseline.  A positive `expectancyDelta` means the excluded
+   * group was dragging performance down — a candidate for filtering.
+   *
+   * @param strategyCode Label for the strategy under analysis.
+   * @param trades       Chronological set of closed trades to analyse.
+   */
+  runAblationAnalysis(strategyCode: string, trades: BacktestTrade[]): AblationResult {
+    if (trades.length === 0) {
+      return {
+        strategyCode,
+        baseline: this.computeMetrics([]),
+        variants: [],
+        topRemovalCandidate: null,
+      };
+    }
+
+    const baseline = this.computeMetrics(trades);
+    const variants: AblationVariant[] = [];
+
+    // ── Regime dimension ─────────────────────────────────────────────────────
+    const regimes = [...new Set(trades.map((t) => t.regime).filter(Boolean))];
+    for (const regime of regimes) {
+      const remaining = trades.filter((t) => t.regime !== regime);
+      const removed = trades.length - remaining.length;
+      const remainingMetrics = this.computeMetrics(remaining);
+      variants.push({
+        dimension: 'regime',
+        excluded: regime,
+        removedCount: removed,
+        remainingMetrics,
+        expectancyDelta:
+          Math.round((remainingMetrics.expectancy - baseline.expectancy) * 100) / 100,
+      });
+    }
+
+    // ── Instrument dimension ──────────────────────────────────────────────────
+    const instruments = [...new Set(trades.map((t) => t.instrument).filter(Boolean))];
+    for (const instrument of instruments) {
+      const remaining = trades.filter((t) => t.instrument !== instrument);
+      if (remaining.length === 0) continue; // skip if only one instrument
+      const removed = trades.length - remaining.length;
+      const remainingMetrics = this.computeMetrics(remaining);
+      variants.push({
+        dimension: 'instrument',
+        excluded: instrument,
+        removedCount: removed,
+        remainingMetrics,
+        expectancyDelta:
+          Math.round((remainingMetrics.expectancy - baseline.expectancy) * 100) / 100,
+      });
+    }
+
+    // Best removal candidate — highest positive delta (biggest drag removed).
+    const topRemovalCandidate =
+      variants.length === 0
+        ? null
+        : variants.reduce((best, v) => (v.expectancyDelta > best.expectancyDelta ? v : best));
+
+    return { strategyCode, baseline, variants, topRemovalCandidate };
   }
 
   // ---------------------------------------------------------------------------

@@ -29,6 +29,7 @@ import { TradeQualityForensicsService } from './trade-quality-forensics.service'
 import { DailyIntelligenceReportService } from './daily-intelligence-report.service';
 import { CapitalSimulatorService } from './capital-simulator.service';
 import { MarketActivityHeatmapService } from './market-activity-heatmap.service';
+import { AnalyticsController } from './analytics.controller';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { MarketActivityHeatmapService } from './market-activity-heatmap.service'
     CapitalSimulatorService,
     MarketActivityHeatmapService,
   ],
+  controllers: [AnalyticsController],
   exports: [
     AnalyticsService,
     TradeQualityForensicsService,

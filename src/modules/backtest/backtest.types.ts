@@ -136,3 +136,48 @@ export interface TradingCosts {
   /** Sum of all cost components. */
   total: number;
 }
+
+// ---------------------------------------------------------------------------
+// Strategy Ablation Analysis (Phase 9)
+// ---------------------------------------------------------------------------
+
+/**
+ * Result for a single ablation variant — one dimension value excluded.
+ */
+export interface AblationVariant {
+  /** Dimension being ablated (e.g. 'regime', 'instrument'). */
+  dimension: 'regime' | 'instrument';
+  /** The specific value excluded from this variant (e.g. 'STRONG_BULL'). */
+  excluded: string;
+  /** Number of trades removed by this exclusion. */
+  removedCount: number;
+  /** Metrics of the REMAINING trades (after exclusion). */
+  remainingMetrics: BacktestMetrics;
+  /**
+   * Change in expectancy vs baseline (remaining.expectancy − baseline.expectancy).
+   * Positive value = removing this group IMPROVED expectancy (the excluded
+   * group was dragging performance down).
+   * Negative value = removing this group HURT performance (they were profitable).
+   */
+  expectancyDelta: number;
+}
+
+/**
+ * Full ablation analysis result.
+ *
+ * Runs the backtest once per unique regime and instrument, measuring the
+ * marginal contribution of each. Callers can identify which regimes or
+ * instruments to filter more aggressively in live trading.
+ */
+export interface AblationResult {
+  strategyCode: string;
+  /** Baseline metrics using all trades (no exclusions). */
+  baseline: BacktestMetrics;
+  /** One variant per unique regime and instrument found in the trade set. */
+  variants: AblationVariant[];
+  /**
+   * The single variant that most improves expectancy when excluded
+   * (highest positive expectancyDelta). Null when no trade set is provided.
+   */
+  topRemovalCandidate: AblationVariant | null;
+}
