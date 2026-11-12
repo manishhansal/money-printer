@@ -14,8 +14,9 @@
  *  6. Content-Type: application/json and access-token header on every request.
  */
 
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SecretsService } from '../secrets/secrets.service';
 import {
   DhanAuthFailureError,
@@ -29,6 +30,8 @@ import {
   DhanIntradayCandleRequest,
   DhanKillSwitchResponse,
   DhanLtpResponse,
+  DhanMarginCalculatorRequest,
+  DhanMarginCalculatorResponse,
   DhanModifyOrderRequest,
   DhanModifySuperOrderRequest,
   DhanOhlcResponse,
@@ -68,6 +71,31 @@ interface QueueEntry<T> {
 }
 
 // ---------------------------------------------------------------------------
+// Circuit breaker + retry constants (Phase 10 — Production Hardening)
+// ---------------------------------------------------------------------------
+
+/** Hard timeout for every Dhan API fetch call. Prevents indefinite hangs. */
+const REQUEST_TIMEOUT_MS = 10_000;
+
+/** 5xx status codes treated as transient and eligible for automatic retry. */
+const RETRYABLE_STATUS_CODES = new Set([502, 503, 504]);
+
+/** Maximum number of automatic retries for transient 5xx errors. */
+const MAX_RETRIES = 3;
+
+/** Base back-off delay (ms) for the first retry; doubles each attempt. */
+const BACKOFF_BASE_MS = 500;
+
+/** Consecutive-failure count before the circuit breaker opens. */
+const CB_FAILURE_THRESHOLD = 5;
+
+/** How long (ms) the circuit stays OPEN before switching to HALF_OPEN. */
+const CB_COOLDOWN_MS = 60_000;
+
+/** Circuit breaker state machine states. */
+type CircuitState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
+
+// ---------------------------------------------------------------------------
 // DhanApiClient
 // ---------------------------------------------------------------------------
 
@@ -88,9 +116,18 @@ export class DhanApiClient implements OnModuleDestroy {
   /** NodeJS timer reference so we can clean it up on module destroy. */
   private rateLimitTimer?: ReturnType<typeof setTimeout>;
 
+  // ── Circuit breaker state (Phase 10) ───────────────────────────────────────
+  /** Current circuit breaker state. CLOSED = normal; OPEN = blocking; HALF_OPEN = probing. */
+  private cbState: CircuitState = 'CLOSED';
+  /** Count of consecutive failures that have not been reset by a success. */
+  private cbFailureCount = 0;
+  /** Timestamp when the circuit was opened (used to compute cooldown). */
+  private cbOpenedAt?: Date;
+
   constructor(
     private readonly secrets: SecretsService,
     private readonly config: ConfigService,
+    @Optional() private readonly eventEmitter: EventEmitter2 | null = null,
   ) {
     this.baseUrl = this.config.get<string>('DHAN_API_BASE_URL', 'https://api.dhan.co');
   }
@@ -150,24 +187,72 @@ export class DhanApiClient implements OnModuleDestroy {
     path: string,
     body?: unknown,
     includeClientId = false,
+    retryCount = 0,
   ): Promise<T> {
+    // ── Circuit breaker: OPEN state check ─────────────────────────────────────
+    if (this.cbState === 'OPEN') {
+      const cooldownExpired =
+        this.cbOpenedAt !== undefined && Date.now() - this.cbOpenedAt.getTime() >= CB_COOLDOWN_MS;
+      if (cooldownExpired) {
+        this.cbState = 'HALF_OPEN';
+        this.logger.log(`[CircuitBreaker] OPEN → HALF_OPEN after ${CB_COOLDOWN_MS / 1_000}s`);
+      } else {
+        const remaining = this.cbOpenedAt
+          ? Math.ceil((CB_COOLDOWN_MS - (Date.now() - this.cbOpenedAt.getTime())) / 1_000)
+          : 0;
+        throw new Error(
+          `Dhan API circuit breaker is OPEN — refusing request ${method} ${path}. ` +
+            `Retry in ~${remaining}s. Last failure count: ${this.cbFailureCount}.`,
+        );
+      }
+    }
+
     const url = `${this.baseUrl}${path}`;
     const headers = await this.buildHeaders(includeClientId);
+    const requestStart = Date.now();
 
     // Log the request context — never log the access-token value.
-    this.logger.debug(`→ ${method} ${path}`);
+    const retryLabel = retryCount > 0 ? ` (retry ${retryCount}/${MAX_RETRIES})` : '';
+    this.logger.debug(`→ ${method} ${path}${retryLabel}`);
 
-    const response = await fetch(url, {
-      method,
-      headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
+    // ── Fetch with AbortController timeout (10 s) ─────────────────────────────
+    const controller = new AbortController();
+    const timeoutHandle = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method,
+        headers,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      clearTimeout(timeoutHandle);
+      const isAbort = (err as Error).name === 'AbortError';
+      const msg = isAbort
+        ? `Dhan API request timed out after ${REQUEST_TIMEOUT_MS / 1_000}s: ${method} ${path}`
+        : `Dhan API network error on ${method} ${path}: ${(err as Error).message}`;
+      this.logger.error(msg);
+      this.recordCircuitFailure();
+      // Network errors are retried like transient 5xx.
+      if (retryCount < MAX_RETRIES) {
+        const delay = BACKOFF_BASE_MS * Math.pow(2, retryCount);
+        this.logger.warn(`Retrying ${method} ${path} in ${delay}ms…`);
+        await this.sleep(delay);
+        return this.request<T>(method, path, body, includeClientId, retryCount + 1);
+      }
+      throw new Error(msg);
+    } finally {
+      clearTimeout(timeoutHandle);
+    }
 
     // Authentication failure — invalidate token, no retry (Requirement 3.7).
     if (response.status === 401 || response.status === 403) {
       this.logger.warn(
         `Auth failure (HTTP ${response.status}) on ${method} ${path}; invalidating DHAN_SESSION_TOKEN`,
       );
+      this.recordCircuitFailure(/* permanent */ true);
       await this.invalidateToken();
       throw new DhanAuthFailureError(response.status as 401 | 403, `${method} ${path}`);
     }
@@ -183,25 +268,88 @@ export class DhanApiClient implements OnModuleDestroy {
       );
     }
 
+    // Transient 5xx — retry with exponential back-off.
+    if (RETRYABLE_STATUS_CODES.has(response.status) && retryCount < MAX_RETRIES) {
+      const delay = BACKOFF_BASE_MS * Math.pow(2, retryCount);
+      this.logger.warn(
+        `Transient Dhan error HTTP ${response.status} on ${method} ${path}; ` +
+          `retrying in ${delay}ms (attempt ${retryCount + 1}/${MAX_RETRIES})`,
+      );
+      this.recordCircuitFailure();
+      await this.sleep(delay);
+      return this.request<T>(method, path, body, includeClientId, retryCount + 1);
+    }
+
     if (!response.ok) {
       const errorBody = await this.safeReadJson<DhanErrorResponse>(response);
-      // Log the error type/code — never the token.
       this.logger.error(
         `Dhan API error on ${method} ${path}: ` +
           `HTTP ${response.status} · code=${errorBody?.errorCode ?? 'unknown'} ` +
           `type=${errorBody?.errorType ?? 'unknown'}`,
       );
+      this.recordCircuitFailure();
       throw new Error(
         `Dhan API error: HTTP ${response.status} — ${errorBody?.errorMessage ?? 'Unknown error'}`,
       );
     }
+
+    // Success — reset circuit breaker.
+    this.onRequestSuccess();
 
     // 204 No Content (e.g. cancel super order leg).
     if (response.status === 204) {
       return undefined as unknown as T;
     }
 
-    return response.json() as Promise<T>;
+    const result = response.json() as Promise<T>;
+
+    // Emit order execution latency for the SystemHealthMonitor histogram.
+    const latencyMs = Date.now() - requestStart;
+    this.eventEmitter?.emit('dhan.order.latency', { latencyMs, path, method });
+
+    return result;
+  }
+
+  // ── Circuit breaker helpers ──────────────────────────────────────────────────
+
+  /**
+   * Reset circuit breaker failure count on a successful request.
+   * If HALF_OPEN, closes the circuit (service recovered).
+   */
+  private onRequestSuccess(): void {
+    if (this.cbState !== 'CLOSED') {
+      this.logger.log(`[CircuitBreaker] Request succeeded — circuit moved to CLOSED`);
+    }
+    this.cbState = 'CLOSED';
+    this.cbFailureCount = 0;
+    this.cbOpenedAt = undefined;
+  }
+
+  /**
+   * Increment the failure counter. Opens the circuit when the threshold is reached.
+   *
+   * @param permanent When true (auth failures), opens the circuit immediately
+   *                  regardless of the threshold, since retrying won't help.
+   */
+  private recordCircuitFailure(permanent = false): void {
+    this.cbFailureCount++;
+
+    if (permanent || this.cbFailureCount >= CB_FAILURE_THRESHOLD) {
+      if (this.cbState !== 'OPEN') {
+        this.cbState = 'OPEN';
+        this.cbOpenedAt = new Date();
+        this.logger.error(
+          `[CircuitBreaker] Circuit OPENED after ${this.cbFailureCount} failure(s). ` +
+            `All requests will be rejected for ${CB_COOLDOWN_MS / 1_000}s. ` +
+            `${permanent ? 'Permanent failure (auth).' : ''}`,
+        );
+      }
+    }
+  }
+
+  /** Simple sleep utility for back-off delays. */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**
@@ -475,6 +623,18 @@ export class DhanApiClient implements OnModuleDestroy {
     return this.request<DhanTradebookResponse>('GET', '/v2/trades');
   }
 
+  /**
+   * Retrieve all fills/executions for a specific order.
+   *
+   * Maps to GET /v2/trades/{order-id}.
+   * More targeted than `getTradebook()` when only one order's fills are needed.
+   *
+   * Requirements: Section 5 — Trading APIs audit
+   */
+  async getTradesByOrderId(dhanOrderId: string): Promise<DhanTradebookResponse> {
+    return this.request<DhanTradebookResponse>('GET', `/v2/trades/${dhanOrderId}`);
+  }
+
   // ---------------------------------------------------------------------------
   // 11. Orderbook
   // ---------------------------------------------------------------------------
@@ -501,6 +661,19 @@ export class DhanApiClient implements OnModuleDestroy {
    */
   async placeSuperOrder(request: DhanSuperOrderRequest): Promise<DhanSuperOrderResponse> {
     return this.request<DhanSuperOrderResponse>('POST', '/v2/super/orders', request);
+  }
+
+  /**
+   * Retrieve all Super Orders for the day.
+   *
+   * Maps to GET /v2/super/orders.
+   * Useful for SL verification after reconnect and for monitoring active
+   * Super Order legs (entry + target + stop-loss).
+   *
+   * Requirements: Section 5 — `GET /super/orders` audit item
+   */
+  async getSuperOrders(): Promise<DhanSuperOrderResponse[]> {
+    return this.request<DhanSuperOrderResponse[]>('GET', '/v2/super/orders');
   }
 
   /**
@@ -556,6 +729,32 @@ export class DhanApiClient implements OnModuleDestroy {
    */
   async getOrderById(dhanOrderId: string): Promise<DhanOrder> {
     return this.request<DhanOrder>('GET', `/v2/orders/${dhanOrderId}`);
+  }
+
+  // ---------------------------------------------------------------------------
+  // 16b. Order lookup by correlation ID (crash-recovery path)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Retrieve a Dhan order by the client-assigned correlation ID.
+   *
+   * Maps to GET /v2/orders/external/{correlationId}.
+   *
+   * Critical for crash recovery: if a broker submission succeeded but the
+   * CloudEngine crashed before persisting the DB record, this endpoint
+   * recovers the Dhan orderId using only the correlationId (which the
+   * ExecutionService always stores in the Orders.dhan_correlation_id column
+   * and sets as the pending record key before submission).
+   *
+   * Returns the matching DhanOrder; throws if not found (404 from Dhan).
+   *
+   * Requirements: P0-CRIT-002 (crash recovery path)
+   */
+  async getOrderByCorrelationId(correlationId: string): Promise<DhanOrder> {
+    return this.request<DhanOrder>(
+      'GET',
+      `/v2/orders/external/${encodeURIComponent(correlationId)}`,
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -637,9 +836,7 @@ export class DhanApiClient implements OnModuleDestroy {
    * Note: All positions must be closed and no pending orders must exist
    * before Dhan will accept activation.
    */
-  async setKillSwitch(
-    status: 'ACTIVATE' | 'DEACTIVATE',
-  ): Promise<DhanKillSwitchResponse> {
+  async setKillSwitch(status: 'ACTIVATE' | 'DEACTIVATE'): Promise<DhanKillSwitchResponse> {
     return this.request<DhanKillSwitchResponse>(
       'POST',
       `/v2/killswitch?killSwitchStatus=${status}`,
@@ -692,4 +889,30 @@ export class DhanApiClient implements OnModuleDestroy {
   async getPnlExit(): Promise<DhanPnlExitGetResponse> {
     return this.request<DhanPnlExitGetResponse>('GET', '/v2/pnlExit');
   }
+
+  // ---------------------------------------------------------------------------
+  // 26. Margin Calculator (pre-trade accuracy)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Calculate the exact margin required for one or more instruments.
+   *
+   * Maps to POST /v2/margincalculator.
+   *
+   * Use this BEFORE `placeOrder()` for accurate pre-trade margin checks instead
+   * of the naive `entryPrice × quantityUnits` approximation currently used in
+   * SignalDispatcherService.
+   *
+   * Requirements: P2-MED-002 — replace hardcoded requiredMargin approximation.
+   */
+  async calculateMargin(
+    request: DhanMarginCalculatorRequest,
+  ): Promise<DhanMarginCalculatorResponse> {
+    return this.request<DhanMarginCalculatorResponse>('POST', '/v2/margincalculator', request);
+  }
 }
+
+// NOTE: calculateMargin and getOrderByCorrelationId added below the class
+// via module augmentation workaround — using direct addition to the existing
+// DhanApiClient class is cleaner. See src/modules/dhan/dhan-api.client.ts
+// for the getOrderByCorrelationId method already added above.
