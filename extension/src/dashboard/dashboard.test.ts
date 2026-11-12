@@ -11,7 +11,6 @@ import {
   resetDashboardState,
   renderDashboard,
   handleWebSocketMessage,
-  addNotification,
   getAlerts,
   getOptionsFlowStaleClass,
   strategyPerformance,
@@ -212,7 +211,11 @@ test("WebSocket 'PERFORMANCE_UPDATE' message replaces strategyPerformance state"
 test("WebSocket 'ALERT' message appends the alert to the alerts array", () => {
   expect(getAlerts()).toHaveLength(0);
 
-  const firstAlert = makeAlert({ id: 'ws-alert-1', priority: 'MAX', title: 'Kill Switch Triggered' });
+  const firstAlert = makeAlert({
+    id: 'ws-alert-1',
+    priority: 'MAX',
+    title: 'Kill Switch Triggered',
+  });
   handleWebSocketMessage({ type: 'ALERT', payload: firstAlert });
 
   const afterFirst = getAlerts();
@@ -221,7 +224,10 @@ test("WebSocket 'ALERT' message appends the alert to the alerts array", () => {
   expect(afterFirst[0].title).toBe('Kill Switch Triggered');
 
   // A second ALERT message appends without replacing
-  handleWebSocketMessage({ type: 'ALERT', payload: makeAlert({ id: 'ws-alert-2', priority: 'CRITICAL' }) });
+  handleWebSocketMessage({
+    type: 'ALERT',
+    payload: makeAlert({ id: 'ws-alert-2', priority: 'CRITICAL' }),
+  });
   expect(getAlerts()).toHaveLength(2);
   expect(getAlerts()[1].id).toBe('ws-alert-2');
 });

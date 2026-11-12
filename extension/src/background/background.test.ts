@@ -17,12 +17,7 @@
 // globals before any import runs, so the registrations are safe.
 
 import * as stateManager from './state.manager';
-import {
-  recoverState,
-  updateState,
-  getCurrentState,
-  _resetStateForTesting,
-} from './background';
+import { recoverState, updateState, getCurrentState, _resetStateForTesting } from './background';
 import { INITIAL_STATE, ExtensionState } from './background.types';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -52,7 +47,10 @@ describe('Background Service Worker', () => {
       const storedState: ExtensionState = {
         armedState: 'ARMED',
         sessionToken: 'live-session-token',
-        connectionState: 'connected', sessionPnl: 0, activePositionsCount: 0, healthStatus: 'Healthy',
+        connectionState: 'connected',
+        sessionPnl: 0,
+        activePositionsCount: 0,
+        healthStatus: 'Healthy',
       };
 
       jest.spyOn(stateManager, 'loadState').mockResolvedValue(storedState);
@@ -70,7 +68,10 @@ describe('Background Service Worker', () => {
       const storedState: ExtensionState = {
         armedState: 'ARMED_PENDING',
         sessionToken: 'pending-session-token',
-        connectionState: 'connecting', sessionPnl: 0, activePositionsCount: 0, healthStatus: 'Healthy',
+        connectionState: 'connecting',
+        sessionPnl: 0,
+        activePositionsCount: 0,
+        healthStatus: 'Healthy',
       };
 
       jest.spyOn(stateManager, 'loadState').mockResolvedValue(storedState);
@@ -87,7 +88,10 @@ describe('Background Service Worker', () => {
       const storedState: ExtensionState = {
         armedState: 'DISARMED',
         sessionToken: null,
-        connectionState: 'disconnected', sessionPnl: 0, activePositionsCount: 0, healthStatus: 'Healthy',
+        connectionState: 'disconnected',
+        sessionPnl: 0,
+        activePositionsCount: 0,
+        healthStatus: 'Healthy',
       };
 
       jest.spyOn(stateManager, 'loadState').mockResolvedValue(storedState);
@@ -126,7 +130,9 @@ describe('Background Service Worker', () => {
     it('fires DISARMED state and sends user notification when recovery times out', async () => {
       // loadState never resolves — simulates a storage hang
       jest.spyOn(stateManager, 'loadState').mockReturnValue(
-        new Promise<ExtensionState | null>(() => {/* never resolves */}),
+        new Promise<ExtensionState | null>(() => {
+          /* never resolves */
+        }),
       );
       jest.spyOn(stateManager, 'saveState').mockResolvedValue(undefined);
 
@@ -154,9 +160,9 @@ describe('Background Service Worker', () => {
     });
 
     it('fires DISARMED state and notification when storage throws an error', async () => {
-      jest.spyOn(stateManager, 'loadState').mockRejectedValue(
-        new Error('chrome.storage read failure'),
-      );
+      jest
+        .spyOn(stateManager, 'loadState')
+        .mockRejectedValue(new Error('chrome.storage read failure'));
       jest.spyOn(stateManager, 'saveState').mockResolvedValue(undefined);
 
       // No timer advancement needed — the rejection resolves immediately
@@ -176,9 +182,7 @@ describe('Background Service Worker', () => {
 
   describe('State persistence to chrome.storage.session', () => {
     it('persists state to chrome.storage.session via saveState after recoverState()', async () => {
-      const saveStateSpy = jest
-        .spyOn(stateManager, 'saveState')
-        .mockResolvedValue(undefined);
+      const saveStateSpy = jest.spyOn(stateManager, 'saveState').mockResolvedValue(undefined);
       jest.spyOn(stateManager, 'loadState').mockResolvedValue(null);
 
       await recoverState(1000);
@@ -190,9 +194,7 @@ describe('Background Service Worker', () => {
     });
 
     it('persists updated state to chrome.storage.session via updateState()', async () => {
-      const saveStateSpy = jest
-        .spyOn(stateManager, 'saveState')
-        .mockResolvedValue(undefined);
+      const saveStateSpy = jest.spyOn(stateManager, 'saveState').mockResolvedValue(undefined);
 
       await updateState({ connectionState: 'connected' });
 
@@ -203,9 +205,7 @@ describe('Background Service Worker', () => {
     });
 
     it('persists each partial update merged with existing state', async () => {
-      const saveStateSpy = jest
-        .spyOn(stateManager, 'saveState')
-        .mockResolvedValue(undefined);
+      const saveStateSpy = jest.spyOn(stateManager, 'saveState').mockResolvedValue(undefined);
 
       // First update: set connectionState
       await updateState({ connectionState: 'connecting' });
@@ -225,11 +225,11 @@ describe('Background Service Worker', () => {
     it('reverted armed state is persisted on timeout recovery', async () => {
       jest.useFakeTimers();
 
-      const saveStateSpy = jest
-        .spyOn(stateManager, 'saveState')
-        .mockResolvedValue(undefined);
+      const saveStateSpy = jest.spyOn(stateManager, 'saveState').mockResolvedValue(undefined);
       jest.spyOn(stateManager, 'loadState').mockReturnValue(
-        new Promise<ExtensionState | null>(() => {/* never resolves */}),
+        new Promise<ExtensionState | null>(() => {
+          /* never resolves */
+        }),
       );
 
       const recoverPromise = recoverState(5000);
@@ -255,7 +255,10 @@ describe('Background Service Worker', () => {
         jest.spyOn(stateManager, 'loadState').mockResolvedValue({
           armedState: storedArmedState,
           sessionToken: null,
-          connectionState: 'connected', sessionPnl: 0, activePositionsCount: 0, healthStatus: 'Healthy',
+          connectionState: 'connected',
+          sessionPnl: 0,
+          activePositionsCount: 0,
+          healthStatus: 'Healthy',
         });
         jest.spyOn(stateManager, 'saveState').mockResolvedValue(undefined);
 
@@ -270,7 +273,10 @@ describe('Background Service Worker', () => {
       jest.spyOn(stateManager, 'loadState').mockResolvedValue({
         armedState: 'ARMED',
         sessionToken: 'tok',
-        connectionState: 'connected', sessionPnl: 0, activePositionsCount: 0, healthStatus: 'Healthy',
+        connectionState: 'connected',
+        sessionPnl: 0,
+        activePositionsCount: 0,
+        healthStatus: 'Healthy',
       });
       jest.spyOn(stateManager, 'saveState').mockResolvedValue(undefined);
 
