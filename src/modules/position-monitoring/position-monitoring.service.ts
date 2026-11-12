@@ -172,6 +172,25 @@ export class PositionMonitoringService implements OnModuleInit {
    * Requirements: 7.4, 9.4, 12.2
    */
   async processTick(instrumentId: string, currentPrice: number): Promise<void> {
+    // ── Fast-path guard using in-memory tracking map ─────────────────────────
+    // The instrumentToPositions map is populated by onModuleInit() and kept
+    // current via addPosition() / removePosition().  Checking it first avoids
+    // a DB round-trip for the overwhelming majority of ticks (instruments that
+    // have no tracked positions at all).
+    //
+    // Fix for DEFECT-004: previously a positionsRepo.find() was issued on EVERY
+    // tick for EVERY instrument, even when no positions existed.  Under a
+    // 100-instrument feed that created O(n) DB queries per second, risking
+    // event-loop lag that could delay stop-loss processing.
+    const trackedIds = this.instrumentToPositions.get(instrumentId);
+    if (!trackedIds || trackedIds.size === 0) {
+      return;
+    }
+
+    // DB query is now only issued when we know at least one position is tracked
+    // for this instrument.  The DB remains the authoritative source for mutable
+    // fields (current_sl updated by trailing-stop service, is_open flag, etc.)
+    // so we still query rather than caching the full object.
     const positions = await this.positionsRepo.find({
       where: { instrument_id: instrumentId, is_open: true },
     });

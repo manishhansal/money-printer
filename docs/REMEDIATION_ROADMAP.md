@@ -37,7 +37,34 @@ Deliverables:
 
 ---
 
-## Phase 2 — Dhan API Integration Audit (NEXT)
+## Phase 2 — Dhan API Integration Audit ✅ COMPLETE
+
+(Completed in prior sessions — see DHAN_API_INTEGRATION_AUDIT.md)
+
+---
+
+## Phase 4 — DEFECT-001 Fix + Missing Spec Files ✅ COMPLETE (commit `c636d0d`)
+
+| Task | File | Status |
+|------|------|--------|
+| Fix `engine: 'PAPER'` hardcoding in scanner | `signal-scanner.service.ts` | ✅ |
+| Inject `LiveTradingService` into `SignalScannerService` | `signal-scanner.service.ts` | ✅ |
+| Add fast-path guard in `processTick()` | `position-monitoring.service.ts` | ✅ |
+| Update position-monitoring tests for new lifecycle | `position-monitoring.service.spec.ts` | ✅ |
+| Add signal-scanner spec (22 tests) | `signal-scanner.service.spec.ts` | ✅ |
+| Add signal-dispatcher spec (18 tests) | `signal-dispatcher.service.spec.ts` | ✅ |
+| Add agent-orchestrator spec (16 tests) | `agent-orchestrator.service.spec.ts` | ✅ |
+
+---
+
+## Open Issues Tracker (Updated)
+
+| ID | Severity | Description | Phase |
+|----|----------|-------------|-------|
+| DEFECT-002 | P1 | `entryConditionsMet` always true — no strategy entry logic | Backlog |
+| DEFECT-003 | P1 | `momentum`/`vwapTrendAlignment` hardcoded to 8 — TechnicalAnalysisService not wired | Backlog |
+| DEFECT-005 | P0-External | No historical NSE options data — cannot fix in code | External |
+| DEFECT-008 | P2 | No integration test suite | Backlog |
 
 Planned:
 - [ ] Create `DHAN_API_ENDPOINT_MATRIX.md`

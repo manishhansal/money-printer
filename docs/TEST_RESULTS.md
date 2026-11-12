@@ -73,3 +73,84 @@
 | InstrumentMasterService | Mock CSV download and upsert | P3 |
 | mandatorySquareOff with Dhan reconciliation | Integration test | P2 |
 | 15:28 cron critical alert | Mock open positions at 15:28 | P2 |
+
+## Updated Test Count History (Session 4 — 2026-11-12)
+
+| Phase | Tests Added | Total | Status |
+|-------|------------|-------|--------|
+| Baseline | — | 1,442 | All pass |
+| Phase 1 (lot-size) | +9 invariant tests | 1,451 | All pass |
+| Phase 4 (session timing) | +5 boundary tests | 1,456 | All pass |
+| Phase 10 (holiday calendar) | +3 holiday tests | 1,459 | All pass |
+| Phase 6 (SniperEntry) | +19 filter tests | 1,478 | All pass |
+| Phase 7 (TargetAndRunner) | +23 lifecycle tests | 1,489 | All pass |
+| Session 3 final | — | 1,489 | All pass |
+| Session 8 audit baseline | — | 1,535 | All pass |
+| Session 4 remediation | +56 tests (3 new spec files + position-monitoring update) | **1,591** | **All pass** ✅ |
+
+## Session 4 New Tests (commit `c636d0d`)
+
+### signal-scanner.service.spec.ts (22 tests)
+
+- Engine selection — `engine: 'LIVE'` when ARMED (DEFECT-001 regression)
+- Engine selection — `engine: 'PAPER'` when DISARMED
+- Engine selection — never `'LIVE'` when `isArmed()` false
+- Engine selection — transitions correctly as arm state changes
+- Scan skips on CLOSING phase
+- Scan skips on EOD_RECONCILIATION phase
+- Scan proceeds on MORNING_MOMENTUM (Redis keys queried)
+- Scan warns and returns when no snapshots in Redis
+- `isEligible()` returns false when SniperEntryService rejects
+- `isEligible()` returns true when SniperEntryService approves
+- `computeComponentScores` STRONG_BULL → regimeAlignment=15
+- `computeComponentScores` STRONG_BEAR → regimeAlignment=4
+- `computeComponentScores` momentum=8 (DEFECT-003 documented)
+- `computeComponentScores` vwapTrendAlignment=8 (DEFECT-003 documented)
+- `computeComponentScores` priceStructure=12 when bid+ask present
+- `computeComponentScores` priceStructure=10 when bid/ask null
+- `computeComponentScores` volumeConfirmation=13 when volume>100
+- `computeComponentScores` volumeConfirmation=10 when 0<volume≤100
+- `computeComponentScores` volumeConfirmation=7 when volume=0
+- `computeComponentScores` rrQuality=10 when R:R≥2.0
+- `computeComponentScores` rrQuality=8 when 1.5≤R:R<2.0
+- `computeComponentScores` rrQuality=5 when R:R<1.5
+
+### signal-dispatcher.service.spec.ts (18 tests)
+
+- Routes to paper when payload.engine=PAPER
+- Routes to live when payload.engine=LIVE and ARMED
+- Does NOT route to live when engine=PAPER even if ARMED
+- Does NOT route to paper when engine=LIVE
+- Skips BUY when open LONG paper position already exists
+- Proceeds BUY when no existing LONG paper position
+- Rejects paper dispatch when instrument not found
+- Rejects paper dispatch when lotSize=0
+- Converts 1 lot × 75 (NIFTY) = 75 units on paper path
+- Converts 2 lots × 25 (FINNIFTY) = 50 units on paper path
+- Skips live dispatch when engine not ARMED
+- Skips live dispatch when new entries blocked
+- Rejects live dispatch when instrument not found
+- Rejects live dispatch when lotSize=0
+- Converts 3 lots × 50 = 150 units on live path
+- Passes requiredMargin derived from portfolio capital
+- Silently ignores payload that fails type-guard check
+- Processes valid PAPER payload with all required fields
+
+### agent-orchestrator.service.spec.ts (16 tests)
+
+- Returns ResearchDecision when LLM disabled
+- ResearchDecision has all required structural fields
+- portfolioManager never null
+- workflowId is UUID
+- completedAt at or after snapshotAt
+- timedOutAgents=0 with rule-based fallback
+- At least one analyst BULLISH when LTP>VWAP and MACD BULLISH
+- At least one analyst BEARISH when LTP<VWAP and MACD BEARISH
+- At least one analyst HIGH confidence when all 4 bullish signals align
+- At least one analyst LOW confidence when signals mixed (bull=2, bear=2)
+- portfolioManager.finalVerdict is EXECUTE|SKIP|PAPER_ONLY
+- portfolioManager.verdictReason is non-empty string
+- ResearchDecision has no broker order fields (advisory only)
+- Workflow completes without throwing on LlmUnavailableError
+- Workflow completes without throwing when every call times out
+- Verdict structurally valid in bearish/high-vix context

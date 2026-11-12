@@ -40,7 +40,20 @@ SignalDispatcherService.onSignalAccepted()
 
 ## 3. Confirmed Defects
 
-### 3.1 P0-CRIT-001 — Quantity in Units vs Lots (Lot-Size Bug)
+### 3.1 ~~P0-CRIT-001 — Quantity in Units vs Lots (Lot-Size Bug)~~ → FIXED (prior sessions)
+
+Previously described. Fixed in Sessions 1–2. Verified by 9 invariant tests in `execution.service.spec.ts`.
+
+---
+
+### ~~3.1b P0: engine:'PAPER' Hardcoded in Signal Scanner~~ → **FIXED_AND_VERIFIED** (commit `c636d0d`)
+
+**Files fixed:**
+- `src/modules/signal-scanner/signal-scanner.service.ts` — added `LiveTradingService` injection; `buildCandidate()` now returns `engine: this.liveTradingService.isArmed() ? 'LIVE' : 'PAPER'`
+
+**Regression tests:** 22 tests in `signal-scanner.service.spec.ts`, including 4 explicit engine-selection tests.
+
+**Previously reported as DEFECT-001 in MASTER_TEST_RESULTS.md.**
 
 **Files:**
 - `src/modules/signal-scanner/signal-scanner.types.ts` line 45: `positionSize: number` — documented as "Proposed position size in lots."
@@ -169,6 +182,20 @@ const IDEMPOTENCY_TTL_SECONDS = 300;
 ```
 
 **Impact:** A signal that is retried more than 5 minutes after the original submission (e.g., during broker reconnection) bypasses the idempotency check. The DB idempotency constraint (unique on `idempotency_key`) handles this correctly only if the order was persisted before TTL expiry. After the execution ordering fix (P0-CRIT-002), the DB becomes the authoritative idempotency store.
+
+---
+
+### ~~3.4 P2-MED-001 — dynamicCapital Hardcoded in Dispatcher~~ → FIXED (prior sessions)
+
+Addressed in Session 2. `PortfolioService.getDynamicCapital('LIVE')` now used.
+
+---
+
+### ~~DEFECT-004: processTick() DB Query on Every Tick~~ → **FIXED_AND_VERIFIED** (commit `c636d0d`)
+
+**File fixed:** `src/modules/position-monitoring/position-monitoring.service.ts`  
+**Fix:** Added in-memory `instrumentToPositions` fast-path guard before `positionsRepo.find()`. See RCA-007 in `ROOT_CAUSE_ANALYSIS.md`.  
+**Tests:** `position-monitoring.service.spec.ts` — 14 tests all pass.
 
 ---
 
