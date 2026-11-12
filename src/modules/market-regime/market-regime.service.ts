@@ -54,6 +54,7 @@ import {
   REGIME_CURRENT_KEY,
   REGIME_CHANGED_EVENT,
   REGIME_UNSTABLE_EVENT,
+  TrendDirection,
 } from './market-regime.types';
 
 /** Redis TTL for `regime:current` in seconds (Requirement 18.7). */
@@ -105,6 +106,12 @@ export class MarketRegimeService implements OnModuleInit {
 
   /** UTC timestamp when `currentInputs` was last updated. */
   private lastInputsTimestamp: Date | null = null;
+
+  /**
+   * Short-term LTP cache for trend computation: securityId → previous LTP.
+   * Updated each minute by buildRegimeInputsFromRedis().
+   */
+  private readonly prevLtpCache = new Map<string, number>();
 
   constructor(
     @InjectRepository(MarketRegimes)
@@ -324,14 +331,24 @@ export class MarketRegimeService implements OnModuleInit {
    */
   @Cron(CronExpression.EVERY_MINUTE)
   async updateRegime(): Promise<void> {
+    // ── Primary path: use live NIFTY/BANKNIFTY LTP from Redis ──────────────
+    // Try to build regime inputs from live index snapshots (securityIds 13 =
+    // NIFTY, 25 = BANKNIFTY). These are subscribed by SubscriptionRotationService
+    // on WebSocket connect. If fresh data exists, classify from it immediately.
+    const liveInputs = await this.buildRegimeInputsFromRedis();
+    if (liveInputs) {
+      this.currentInputs = liveInputs;
+      this.lastInputsTimestamp = new Date();
+      await this.performClassification(liveInputs);
+      return;
+    }
+
+    // ── Fallback: re-run last known inputs (original behaviour) ────────────
     if (!this.currentInputs) {
       this.logger.debug('updateRegime: no indicator inputs available — skipping classification');
       return;
     }
 
-    // Guard against stale inputs: if the last update is > 60 s old, the data
-    // source may have stopped publishing — log a warning but still re-run with
-    // last known values to maintain a non-null regime.
     if (this.lastInputsTimestamp) {
       const ageMs = Date.now() - this.lastInputsTimestamp.getTime();
       if (ageMs > 60_000) {
@@ -342,6 +359,69 @@ export class MarketRegimeService implements OnModuleInit {
     }
 
     await this.performClassification(this.currentInputs);
+  }
+
+  /**
+   * Build regime inputs from live Redis snapshots for NIFTY (secId=13),
+   * BANKNIFTY (secId=25), and India VIX (secId=36).
+   *
+   * Uses a simple trend proxy: compare current LTP to the LTP stored in a
+   * short-term in-memory cache (previous minute's snapshot). If NIFTY is up
+   * >0.1% → BULLISH; down >0.1% → BEARISH; otherwise SIDEWAYS.
+   *
+   * Returns null when no NIFTY snapshot is available in Redis.
+   */
+  private async buildRegimeInputsFromRedis(): Promise<RegimeInputs | null> {
+    try {
+      const niftyRaw = await this.redisService.get('mkt:snapshot:13');
+      if (!niftyRaw) return null;
+
+      const niftySnap = JSON.parse(niftyRaw) as { ltp: string; volume: string };
+      const niftyLtp = parseFloat(niftySnap.ltp);
+      if (!niftyLtp || niftyLtp <= 0) return null;
+
+      // Compare to previous LTP for trend determination
+      const prevNifty = this.prevLtpCache.get('13') ?? niftyLtp;
+      this.prevLtpCache.set('13', niftyLtp);
+      const niftyChangePct = ((niftyLtp - prevNifty) / prevNifty) * 100;
+      const niftyTrend: TrendDirection =
+        niftyChangePct > 0.1 ? 'BULLISH' : niftyChangePct < -0.1 ? 'BEARISH' : 'SIDEWAYS';
+
+      // BANKNIFTY trend (optional — fall back to NIFTY trend)
+      let bankniftyTrend: TrendDirection = niftyTrend;
+      const bnRaw = await this.redisService.get('mkt:snapshot:25');
+      if (bnRaw) {
+        const bnSnap = JSON.parse(bnRaw) as { ltp: string };
+        const bnLtp = parseFloat(bnSnap.ltp);
+        const prevBn = this.prevLtpCache.get('25') ?? bnLtp;
+        this.prevLtpCache.set('25', bnLtp);
+        const bnChangePct = ((bnLtp - prevBn) / prevBn) * 100;
+        bankniftyTrend =
+          bnChangePct > 0.1 ? 'BULLISH' : bnChangePct < -0.1 ? 'BEARISH' : 'SIDEWAYS';
+      }
+
+      // Volume-based relative volume proxy (snapshot volume / 10M as ratio)
+      const niftyVol = parseInt(niftySnap.volume ?? '0', 10);
+      const relativeVolume = Math.min(3.0, Math.max(0.1, niftyVol / 1_000_000));
+
+      // ATR proxy: 0.5% of NIFTY LTP
+      const atr = niftyLtp * 0.005;
+
+      return {
+        niftyTrend,
+        bankniftyTrend,
+        marketBreadth: niftyTrend === 'BULLISH' ? 60 : niftyTrend === 'BEARISH' ? 40 : 50,
+        advanceDeclineRatio: niftyTrend === 'BULLISH' ? 1.5 : niftyTrend === 'BEARISH' ? 0.7 : 1.0,
+        vwapDeviation: niftyChangePct,
+        indiaVix: 15, // conservative default — no VIX feed yet
+        atr,
+        relativeVolume,
+        sectorStrength: null,
+        futuresBasis: null,
+      };
+    } catch {
+      return null;
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
