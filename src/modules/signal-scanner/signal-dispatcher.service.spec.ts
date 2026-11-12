@@ -4,7 +4,7 @@
  * Unit tests for SignalDispatcherService — the event-driven routing layer that
  * directs accepted signals to either the paper or live execution engine.
  *
- * Coverage (18 tests):
+ * Coverage (24 tests):
  *
  *  Routing:
  *   1.  Routes to paper when payload.engine === 'PAPER'
@@ -32,9 +32,19 @@
  *  17.  Silently ignores payload that fails the type-guard check
  *  18.  Processes valid payload with all required fields present
  *
+ *  Idempotency key correctness (NEW_BUG_B / NEW_BUG_F regression):
+ *  19.  PAPER path idempotency key is deterministic: 'signal-{signalId}' (no Date.now())
+ *  20.  LIVE path idempotency key is deterministic: 'signal-{signalId}' (no uuidv4)
+ *  21.  Two PAPER dispatches for the same signalId use the same idempotency key
+ *  22.  Two LIVE dispatches for the same signalId use the same idempotency key
+ *
+ *  In-process submission lock (NEW_BUG_A regression):
+ *  23.  Second concurrent LIVE dispatch for the same instrument+direction is skipped
+ *  24.  Lock is released after the first dispatch completes (next signal can proceed)
+ *
  * All tests use in-memory stubs — no real database, Redis or broker connection needed.
  *
- * Requirements: DEFECT-001, DEFECT-007, signal routing coverage
+ * Requirements: DEFECT-001, DEFECT-007, NEW_BUG_A, NEW_BUG_B, NEW_BUG_F
  */
 
 import { Test, TestingModule } from '@nestjs/testing';
@@ -47,6 +57,7 @@ import { ExecutionService } from '../execution/execution.service';
 import { LiveTradingService } from '../live-trading/live-trading.service';
 import { PortfolioService } from '../portfolio/portfolio.service';
 import { DhanApiClient } from '../dhan/dhan-api.client';
+import { RiskManagementService } from '../risk-management/risk-management.service';
 import { SignalDispatcherService } from './signal-dispatcher.service';
 import { SignalAcceptedEventPayload } from './signal-scanner.types';
 
@@ -93,15 +104,20 @@ interface MockDeps {
   service: SignalDispatcherService;
   paperTradingService: { submitPaperOrder: jest.Mock; getOpenPaperPositions: jest.Mock };
   executionService: { placeOrder: jest.Mock };
-  liveTradingService: { isArmed: jest.Mock; isNewEntryBlocked: jest.Mock };
+  liveTradingService: {
+    isArmed: jest.Mock;
+    isNewEntryBlocked: jest.Mock;
+    getArmedState: jest.Mock;
+  };
   portfolioService: { getDynamicCapital: jest.Mock; getOpenPositions: jest.Mock };
+  riskManagementService: { computePositionSize: jest.Mock };
   dhanApiClient: { calculateMargin: jest.Mock };
   instrumentsRepo: { findOne: jest.Mock };
   userSettingsRepo: { findOne: jest.Mock };
 }
 
 async function buildService(
-  overrides: { isArmed?: boolean; entriesBlocked?: boolean } = {},
+  overrides: { isArmed?: boolean; entriesBlocked?: boolean; suggestedLots?: number } = {},
 ): Promise<MockDeps> {
   const paperTradingService = {
     submitPaperOrder: jest.fn().mockResolvedValue({
@@ -123,11 +139,22 @@ async function buildService(
   const liveTradingService = {
     isArmed: jest.fn().mockReturnValue(overrides.isArmed ?? false),
     isNewEntryBlocked: jest.fn().mockReturnValue(overrides.entriesBlocked ?? false),
+    // getArmedState is called in the warn-log message when isArmed() returns false.
+    // Without this mock the warning string interpolation throws TypeError, which is
+    // silently caught by onSignalAccepted's try-catch — masking the real guard path.
+    // Fix for NEW_BUG_J: include getArmedState so tests exercise the correct code path.
+    getArmedState: jest.fn().mockReturnValue(overrides.isArmed ? 'ARMED' : 'DISARMED'),
   };
 
   const portfolioService = {
     getDynamicCapital: jest.fn().mockReturnValue('200000.00'),
     getOpenPositions: jest.fn().mockReturnValue([]),
+  };
+
+  // RiskManagementService mock — computePositionSize returns the configured
+  // suggestedLots (default 1) so lot-conversion tests can control the result.
+  const riskManagementService = {
+    computePositionSize: jest.fn().mockReturnValue(overrides.suggestedLots ?? 1),
   };
 
   const dhanApiClient = {
@@ -149,6 +176,7 @@ async function buildService(
       { provide: ExecutionService, useValue: executionService },
       { provide: LiveTradingService, useValue: liveTradingService },
       { provide: PortfolioService, useValue: portfolioService },
+      { provide: RiskManagementService, useValue: riskManagementService },
       { provide: DhanApiClient, useValue: dhanApiClient },
       { provide: getRepositoryToken(Instruments), useValue: instrumentsRepo },
       { provide: getRepositoryToken(UserSettings), useValue: userSettingsRepo },
@@ -161,6 +189,7 @@ async function buildService(
     executionService,
     liveTradingService,
     portfolioService,
+    riskManagementService,
     dhanApiClient,
     instrumentsRepo,
     userSettingsRepo,
@@ -270,15 +299,18 @@ describe('SignalDispatcherService — paper path guards', () => {
   });
 
   it('converts 2 lots × 25 (FINNIFTY) = 50 units on the paper path', async () => {
-    const { service, paperTradingService, instrumentsRepo } = await buildService();
+    // Risk engine mock returns 2 lots; dispatcher should convert to 2 × 25 = 50 units.
+    const { service, paperTradingService, instrumentsRepo } = await buildService({
+      suggestedLots: 2,
+    });
     instrumentsRepo.findOne.mockResolvedValue(makeInstrument({ lotSize: 25 }));
 
-    await service.onSignalAccepted(makePayload({ engine: 'PAPER', positionSize: 2 }));
+    await service.onSignalAccepted(makePayload({ engine: 'PAPER', positionSize: 1 }));
 
     const callArg = paperTradingService.submitPaperOrder.mock.calls[0][0];
-    expect(callArg.quantity).toBe(50);
+    expect(callArg.quantity).toBe(50); // 2 lots × 25 units/lot
     expect(callArg.lotSize).toBe(25);
-    expect(callArg.selectedLots).toBe(2);
+    expect(callArg.selectedLots).toBe(2); // risk engine result, not positionSize
   });
 });
 
@@ -325,14 +357,18 @@ describe('SignalDispatcherService — live path guards', () => {
   });
 
   it('converts 3 lots × 50 = 150 units on the live path', async () => {
-    const { service, executionService, instrumentsRepo } = await buildService({ isArmed: true });
+    // Risk engine mock returns 3 lots; dispatcher should convert to 3 × 50 = 150 units.
+    const { service, executionService, instrumentsRepo } = await buildService({
+      isArmed: true,
+      suggestedLots: 3,
+    });
     instrumentsRepo.findOne.mockResolvedValue(makeInstrument({ lotSize: 50 }));
 
-    await service.onSignalAccepted(makePayload({ engine: 'LIVE', positionSize: 3 }));
+    await service.onSignalAccepted(makePayload({ engine: 'LIVE', positionSize: 1 }));
 
     const callArg = executionService.placeOrder.mock.calls[0][0];
-    expect(callArg.quantity).toBe(150);
-    expect(callArg.selectedLots).toBe(3);
+    expect(callArg.quantity).toBe(150); // 3 lots × 50 units/lot
+    expect(callArg.selectedLots).toBe(3); // risk engine result, not positionSize
   });
 
   it('passes requiredMargin derived from portfolio capital on the live path', async () => {
@@ -379,5 +415,122 @@ describe('SignalDispatcherService — payload validation', () => {
     expect(paperTradingService.submitPaperOrder).toHaveBeenCalledTimes(1);
     const callArg = paperTradingService.submitPaperOrder.mock.calls[0][0];
     expect(callArg.signalScore).toBe(90);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 19–22. Idempotency key correctness (NEW_BUG_B / NEW_BUG_F regression)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('SignalDispatcherService — idempotency key correctness', () => {
+  it('PAPER path: idempotency key is signal-{signalId} (no Date.now() suffix — NEW_BUG_F regression)', async () => {
+    const { service, paperTradingService } = await buildService();
+    const payload = makePayload({ engine: 'PAPER', signalId: 'sig-deterministic-1' });
+
+    await service.onSignalAccepted(payload);
+
+    const callArg = paperTradingService.submitPaperOrder.mock.calls[0][0];
+    // Key must be exactly 'signal-sig-deterministic-1' — no Date.now() appended
+    expect(callArg.idempotencyKey).toBe('signal-sig-deterministic-1');
+    // Verify it does NOT contain a hyphen followed by digits (would indicate Date.now())
+    expect(callArg.idempotencyKey).toMatch(/^signal-sig-deterministic-1$/);
+  });
+
+  it('LIVE path: idempotency key is signal-{signalId} (no uuidv4 — NEW_BUG_B regression)', async () => {
+    const { service, executionService } = await buildService({ isArmed: true });
+    const payload = makePayload({ engine: 'LIVE', signalId: 'sig-deterministic-2' });
+
+    await service.onSignalAccepted(payload);
+
+    const callArg = executionService.placeOrder.mock.calls[0][0];
+    // Key must be exactly 'signal-sig-deterministic-2' — not a UUID
+    expect(callArg.idempotencyKey).toBe('signal-sig-deterministic-2');
+    // UUID pattern would be 8-4-4-4-12 hex chars — verify the key is NOT a UUID
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    expect(callArg.idempotencyKey).not.toMatch(uuidPattern);
+  });
+
+  it('Two PAPER dispatches for the same signalId produce the same idempotency key', async () => {
+    const { service, paperTradingService } = await buildService();
+    const payload = makePayload({ engine: 'PAPER', signalId: 'sig-same-id' });
+
+    // First dispatch
+    await service.onSignalAccepted(payload);
+    const key1 = paperTradingService.submitPaperOrder.mock.calls[0][0].idempotencyKey as string;
+
+    // Second dispatch (simulating duplicate event delivery or retry)
+    await service.onSignalAccepted(payload);
+    const key2 = paperTradingService.submitPaperOrder.mock.calls[1][0].idempotencyKey as string;
+
+    // Both calls must use the same key — PaperTradingService's idempotency guard
+    // will reject the second call when it finds the key already in Redis.
+    expect(key1).toBe(key2);
+    expect(key1).toBe('signal-sig-same-id');
+  });
+
+  it('Two LIVE dispatches for the same signalId produce the same idempotency key', async () => {
+    const { service, executionService } = await buildService({ isArmed: true });
+    const payload = makePayload({ engine: 'LIVE', signalId: 'sig-same-live-id' });
+
+    await service.onSignalAccepted(payload);
+    const key1 = executionService.placeOrder.mock.calls[0][0].idempotencyKey as string;
+
+    await service.onSignalAccepted(payload);
+    const key2 = executionService.placeOrder.mock.calls[1][0].idempotencyKey as string;
+
+    expect(key1).toBe(key2);
+    expect(key1).toBe('signal-sig-same-live-id');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 23–24. In-process submission lock (NEW_BUG_A regression)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('SignalDispatcherService — in-process submission lock', () => {
+  it('skips LIVE dispatch when activeSubmissions lock is already held for the same instrument+direction', async () => {
+    // Directly manipulate the in-process lock to simulate a concurrent dispatch
+    // already in-flight. This tests the lock check without race-condition timing
+    // complexity from async mock resolution.
+    const { service, executionService } = await buildService({ isArmed: true });
+
+    // Simulate a concurrent dispatch holding the lock for inst-uuid-1 BUY
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const svc = service as any;
+    svc.activeSubmissions.add('inst-uuid-1:BUY');
+
+    const payload = makePayload({ engine: 'LIVE', instrumentId: 'inst-uuid-1', direction: 'BUY' });
+    await service.onSignalAccepted(payload);
+
+    // Lock was held — placeOrder must NOT have been called
+    expect(executionService.placeOrder).not.toHaveBeenCalled();
+  });
+
+  it('lock is released after the first dispatch completes — a subsequent signal can proceed', async () => {
+    const { service, executionService } = await buildService({ isArmed: true });
+    const payload = makePayload({
+      engine: 'LIVE',
+      signalId: 'sig-first',
+      instrumentId: 'inst-lock-release-test',
+    });
+
+    // First dispatch completes normally — lock is acquired and released
+    await service.onSignalAccepted(payload);
+    expect(executionService.placeOrder).toHaveBeenCalledTimes(1);
+
+    // After the first dispatch the lock must be released
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const svc = service as any;
+    expect(svc.activeSubmissions.has('inst-lock-release-test:BUY')).toBe(false);
+
+    // Second dispatch for the same instrument succeeds (lock is free)
+    await service.onSignalAccepted(
+      makePayload({
+        engine: 'LIVE',
+        signalId: 'sig-second',
+        instrumentId: 'inst-lock-release-test',
+      }),
+    );
+    expect(executionService.placeOrder).toHaveBeenCalledTimes(2);
   });
 });
