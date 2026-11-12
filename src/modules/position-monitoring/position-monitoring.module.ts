@@ -31,13 +31,18 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 import { Position } from '../../database/entities/positions.entity';
 import { PositionMonitoringService } from './position-monitoring.service';
 import { GreedyTrailService } from './greedy-trail.service';
+import { TargetAndRunnerService } from './target-and-runner.service';
+import { TrailingStopModule } from '../trailing-stop/trailing-stop.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Position]),
     EventEmitterModule.forRoot(),
+    // Provides TrailingStopService (8 algorithms) and SlRejectionEscalationService
+    // (SL rejection escalation ladder, Reqs 12.1, 12.6, 12.7–12.9).
+    TrailingStopModule,
   ],
-  providers: [PositionMonitoringService, GreedyTrailService],
-  exports: [PositionMonitoringService],
+  providers: [PositionMonitoringService, GreedyTrailService, TargetAndRunnerService],
+  exports: [PositionMonitoringService, TargetAndRunnerService],
 })
 export class PositionMonitoringModule {}
