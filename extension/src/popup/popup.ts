@@ -23,15 +23,21 @@ export type BswMessage =
   | { type: 'DISARM' }
   | { type: 'OPEN_SIDE_PANEL' }
   | { type: 'GET_SETTINGS' }
-  | { type: 'SAVE_SETTINGS'; payload: { paperStartingCapital: string; defaultRiskPercentage: string } };
+  | {
+      type: 'SAVE_SETTINGS';
+      payload: { paperStartingCapital: string; defaultRiskPercentage: string };
+    };
 
 /** Runtime chrome shim — defined globally by the browser extension environment. */
 declare const chrome: {
   runtime: {
-    sendMessage<T = unknown>(
-      message: BswMessage,
-      callback?: (response: T) => void,
-    ): void;
+    sendMessage<T = unknown>(message: BswMessage, callback?: (response: T) => void): void;
+  };
+  storage: {
+    local: {
+      get(keys: string | string[], callback: (result: Record<string, unknown>) => void): void;
+      set(items: Record<string, unknown>, callback?: () => void): void;
+    };
   };
 };
 
@@ -84,8 +90,7 @@ export function renderState(state: PopupState): void {
   // Disabled in ARMED_PENDING and ARMED states so a single click cannot arm.
   const activateBtn = document.getElementById('activate-btn') as HTMLButtonElement | null;
   if (activateBtn) {
-    activateBtn.disabled =
-      state.armedState === 'ARMED_PENDING' || state.armedState === 'ARMED';
+    activateBtn.disabled = state.armedState === 'ARMED_PENDING' || state.armedState === 'ARMED';
   }
 
   // ── Confirm button ─────────────────────────────────────────────────────────
@@ -101,10 +106,7 @@ export function renderState(state: PopupState): void {
   // Shown whenever the engine is not fully disarmed (ARMED_PENDING or ARMED).
   const disarmBtn = document.getElementById('disarm-btn') as HTMLButtonElement | null;
   if (disarmBtn) {
-    setVisible(
-      disarmBtn,
-      state.armedState === 'ARMED' || state.armedState === 'ARMED_PENDING',
-    );
+    setVisible(disarmBtn, state.armedState === 'ARMED' || state.armedState === 'ARMED_PENDING');
   }
 
   // ── System health badge ────────────────────────────────────────────────────
@@ -232,10 +234,66 @@ function setVisible(el: HTMLElement, visible: boolean): void {
 // Settings helpers — load, display and save paper capital config
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// API base URL resolution — initialised from chrome.storage.local on load
+// ---------------------------------------------------------------------------
+
+/**
+ * Module-level cache so getApiBaseUrl() stays synchronous.
+ * Pre-populated from chrome.storage.local immediately when the popup script
+ * loads.  Falls back to localhost:3002 until the async read completes (first
+ * call in the same tick), then uses the stored value for all subsequent calls.
+ */
+let _cachedApiUrl: string | null = null;
+
+// Kick off storage read immediately at module-load time (non-blocking).
+if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+  chrome.storage.local.get('apiBaseUrl', (result: Record<string, unknown>) => {
+    const stored = result['apiBaseUrl'];
+    if (stored && typeof stored === 'string' && stored.startsWith('http')) {
+      _cachedApiUrl = stored;
+      // Also propagate to the window global so future calls are instant.
+      (window as unknown as Record<string, unknown>)['MONEYPRINTER_API_URL'] = stored;
+    }
+  });
+}
+
+/**
+ * Resolves the CloudEngine base URL.
+ *
+ * Priority:
+ *   1. `window.MONEYPRINTER_API_URL` — injected at build time for production
+ *   2. `chrome.storage.local` key `apiBaseUrl` — set by the user in settings
+ *      (populated asynchronously above; available from the second call onward)
+ *   3. `http://localhost:3002` — development fallback
+ *
+ * Requirement P1-HIGH-002.
+ */
+function getApiBaseUrl(): string {
+  // Build-time override (injected via manifest externally_connectable / background).
+  const win = window as unknown as Record<string, unknown>;
+  if (typeof window !== 'undefined' && win['MONEYPRINTER_API_URL']) {
+    return String(win['MONEYPRINTER_API_URL']);
+  }
+  // User-configured URL loaded from chrome.storage.local.
+  if (_cachedApiUrl) return _cachedApiUrl;
+  // Development fallback.
+  return 'http://localhost:3002';
+}
+
 /** Fetch current settings from CloudEngine and populate the input fields. */
 function loadSettings(): void {
-  fetch('http://localhost:3002/settings')
-    .then((r) => r.json() as Promise<{ paperStartingCapital: string; defaultRiskPercentage: string; paperRiskPerTrade: string; paperDailyLossLimitRupees: string }>)
+  const apiBase = getApiBaseUrl();
+  fetch(`${apiBase}/settings`)
+    .then(
+      (r) =>
+        r.json() as Promise<{
+          paperStartingCapital: string;
+          defaultRiskPercentage: string;
+          paperRiskPerTrade: string;
+          paperDailyLossLimitRupees: string;
+        }>,
+    )
     .then((s) => {
       const capitalEl = document.getElementById('paper-capital-input') as HTMLInputElement | null;
       const riskEl = document.getElementById('risk-pct-input') as HTMLInputElement | null;
@@ -243,7 +301,9 @@ function loadSettings(): void {
       if (riskEl) riskEl.value = parseFloat(s.defaultRiskPercentage).toFixed(1);
       updateRiskHint();
     })
-    .catch(() => { /* server unreachable — keep HTML defaults */ });
+    .catch(() => {
+      /* server unreachable — keep HTML defaults */
+    });
 }
 
 /** Recompute and display the derived risk/daily-limit hint below the capital input. */
@@ -255,8 +315,8 @@ function updateRiskHint(): void {
 
   const capital = parseFloat(capitalEl.value) || 0;
   const riskPct = parseFloat(riskEl.value) || 1;
-  const riskPerTrade = (capital * riskPct / 100).toFixed(0);
-  const dailyLimit = (capital * 2 / 100).toFixed(0);  // 2% daily loss limit
+  const riskPerTrade = ((capital * riskPct) / 100).toFixed(0);
+  const dailyLimit = ((capital * 2) / 100).toFixed(0); // 2% daily loss limit
   hintEl.textContent = `Risk/trade: ₹${riskPerTrade} · Daily limit: ₹${dailyLimit}`;
 }
 
@@ -273,14 +333,21 @@ function saveSettings(): void {
   const riskPct = parseFloat(riskEl.value);
 
   if (isNaN(capital) || capital < 10000) {
-    if (statusEl) { statusEl.style.color = '#f44336'; statusEl.textContent = 'Min capital: ₹10,000'; }
+    if (statusEl) {
+      statusEl.style.color = '#f44336';
+      statusEl.textContent = 'Min capital: ₹10,000';
+    }
     return;
   }
 
   if (saveBtn) saveBtn.disabled = true;
-  if (statusEl) { statusEl.style.color = '#9e9e9e'; statusEl.textContent = 'Saving…'; }
+  if (statusEl) {
+    statusEl.style.color = '#9e9e9e';
+    statusEl.textContent = 'Saving…';
+  }
 
-  fetch('http://localhost:3002/settings', {
+  const apiBase = getApiBaseUrl();
+  fetch(`${apiBase}/settings`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -290,18 +357,29 @@ function saveSettings(): void {
   })
     .then((r) => {
       if (r.ok) {
-        if (statusEl) { statusEl.style.color = '#4caf50'; statusEl.textContent = '✓ Saved'; }
+        if (statusEl) {
+          statusEl.style.color = '#4caf50';
+          statusEl.textContent = '✓ Saved';
+        }
         updateRiskHint();
       } else {
-        if (statusEl) { statusEl.style.color = '#f44336'; statusEl.textContent = 'Save failed'; }
+        if (statusEl) {
+          statusEl.style.color = '#f44336';
+          statusEl.textContent = 'Save failed';
+        }
       }
     })
     .catch(() => {
-      if (statusEl) { statusEl.style.color = '#f44336'; statusEl.textContent = 'Server unreachable'; }
+      if (statusEl) {
+        statusEl.style.color = '#f44336';
+        statusEl.textContent = 'Server unreachable';
+      }
     })
     .finally(() => {
       if (saveBtn) saveBtn.disabled = false;
-      setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
+      setTimeout(() => {
+        if (statusEl) statusEl.textContent = '';
+      }, 3000);
     });
 }
 
