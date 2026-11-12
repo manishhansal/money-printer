@@ -24,12 +24,14 @@
 
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ScheduleModule } from '@nestjs/schedule';
 
 import { PaperOrder } from '../../database/entities/paper-orders.entity';
 import { PaperExecution } from '../../database/entities/paper-executions.entity';
 import { PaperPosition } from '../../database/entities/paper-positions.entity';
 import { PaperTrade } from '../../database/entities/paper-trades.entity';
 import { UserSettings } from '../../database/entities/user-settings.entity';
+import { Instruments } from '../../database/entities/instruments.entity';
 
 import { TradingChargesModule } from '../charges/trading-charges.module';
 import { PaperTradingService } from './paper-trading.service';
@@ -37,9 +39,11 @@ import { PaperTradingController } from './paper-trading.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([PaperOrder, PaperExecution, PaperPosition, PaperTrade]),
+    TypeOrmModule.forFeature([PaperOrder, PaperExecution, PaperPosition, PaperTrade, Instruments]),
     TradingChargesModule,
     TypeOrmModule.forFeature([UserSettings]),
+    // Enables @Cron decorator for PnL update and EOD square-off.
+    ScheduleModule.forRoot(),
   ],
   controllers: [PaperTradingController],
   providers: [PaperTradingService],

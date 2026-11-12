@@ -19,10 +19,12 @@
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 import { PaperOrder } from '../../database/entities/paper-orders.entity';
 import { PaperExecution } from '../../database/entities/paper-executions.entity';
 import { PaperPosition } from '../../database/entities/paper-positions.entity';
+import { Instruments } from '../../database/entities/instruments.entity';
 import { PaperTrade } from '../../database/entities/paper-trades.entity';
 import { UserSettings } from '../../database/entities/user-settings.entity';
 
@@ -185,7 +187,12 @@ describe('PaperTradingService', () => {
         { provide: getRepositoryToken(PaperPosition), useValue: mockPaperPositionsRepo },
         { provide: getRepositoryToken(PaperTrade), useValue: mockPaperTradesRepo },
         { provide: getRepositoryToken(UserSettings), useValue: mockUserSettingsRepo },
+        {
+          provide: getRepositoryToken(Instruments),
+          useValue: { findOne: jest.fn().mockResolvedValue(null) },
+        },
         { provide: RedisService, useValue: mockRedis },
+        { provide: EventEmitter2, useValue: { emit: jest.fn() } },
       ],
     }).compile();
 

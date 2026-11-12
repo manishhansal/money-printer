@@ -34,12 +34,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { Cron } from '@nestjs/schedule';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 import { PaperOrder } from '../../database/entities/paper-orders.entity';
 import { PaperExecution } from '../../database/entities/paper-executions.entity';
 import { PaperPosition } from '../../database/entities/paper-positions.entity';
 import { PaperTrade } from '../../database/entities/paper-trades.entity';
 import { UserSettings } from '../../database/entities/user-settings.entity';
+import { Instruments } from '../../database/entities/instruments.entity';
 
 import { RedisService } from '../redis/redis.service';
 import { MarketSnapshot } from '../market-data/market-data.types';
@@ -92,8 +95,25 @@ const DEFAULT_SLIPPAGE_CONFIG: PaperSlippageConfig = {
 /** Default rejection probability — no random rejection. Requirement 10.7. */
 const DEFAULT_REJECTION_PROBABILITY = 0.0;
 
+/** NestJS event emitted when a paper trade is closed. PipelineWiringService handles this. */
+export const PAPER_TRADE_CLOSED_EVENT = 'paper.trade.closed';
+
+/** Payload for PAPER_TRADE_CLOSED_EVENT. */
+export interface PaperTradeClosedPayload {
+  engine: 'PAPER';
+  netPnl: string;
+  tradeId: string;
+}
+
 /** Starting capital for a fresh paper portfolio (INR). */
 export const PAPER_STARTING_CAPITAL = '1000000.00'; // ₹10,00,000 (10 lakhs)
+
+/** Payload for PAPER_TRADE_CLOSED_EVENT. */
+export interface PaperTradeClosedPayload {
+  engine: 'PAPER';
+  netPnl: string; // e.g. "-150.00" or "+360.40"
+  tradeId: string;
+}
 
 @Injectable()
 export class PaperTradingService {
@@ -122,7 +142,224 @@ export class PaperTradingService {
     // ── UserSettings — paper starting capital is read from DB, not hardcoded ──
     @InjectRepository(UserSettings)
     private readonly userSettingsRepo: Repository<UserSettings>,
+
+    // ── EventEmitter2 — emits PAPER_TRADE_CLOSED_EVENT for DailyLossMachine ──
+    private readonly eventEmitter: EventEmitter2,
+
+    // ── Instruments — for securityId lookup in PnL update cron ───────────────
+    @InjectRepository(Instruments)
+    private readonly instrumentsRepo: Repository<Instruments>,
   ) {}
+
+  /** In-memory cache: instrument UUID → Dhan securityId for fast PnL lookups. */
+  private readonly securityIdCache = new Map<string, string>();
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Paper Position PnL Monitoring — cron-based, every 15 seconds
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Update unrealized PnL for all open paper positions every 15 seconds.
+   *
+   * For each open position:
+   *  1. Look up the instrument's Dhan securityId (cached in memory).
+   *  2. Read the latest LTP from Redis `mkt:snapshot:{securityId}`.
+   *  3. Compute PnL: (LTP - entryPrice) × qty for LONG, reversed for SHORT.
+   *  4. Persist unrealized_pnl, MFE, MAE to DB.
+   *  5. Check SL/target — close the position immediately if breached.
+   *
+   * Requirements: Paper PnL tracking
+   */
+  @Cron('*/15 * * * * *', { timeZone: 'Asia/Kolkata' })
+  async updatePaperPositionPnl(): Promise<void> {
+    const openPositions = await this.paperPositionsRepo.find({ where: { is_open: true } });
+    if (openPositions.length === 0) return;
+
+    for (const pos of openPositions) {
+      try {
+        // Resolve securityId from cache or DB
+        let securityId = this.securityIdCache.get(pos.instrument_id);
+        if (!securityId) {
+          const instr = await this.instrumentsRepo.findOne({
+            where: { id: pos.instrument_id },
+            select: { securityId: true },
+          });
+          if (!instr) continue;
+          securityId = instr.securityId;
+          this.securityIdCache.set(pos.instrument_id, securityId);
+        }
+
+        // Get current LTP from Redis
+        const raw = await this.redisService.get(`mkt:snapshot:${securityId}`);
+        if (!raw) continue;
+        const ltp = parseFloat((JSON.parse(raw) as { ltp: string }).ltp);
+        if (!ltp || ltp <= 0) continue;
+
+        // Compute PnL
+        const entryPrice = parseFloat(pos.average_entry_price);
+        const qty = pos.quantity;
+        const pnl = pos.direction === 'LONG' ? (ltp - entryPrice) * qty : (entryPrice - ltp) * qty;
+        const mfe = Math.max(parseFloat(pos.mfe), pnl);
+        const mae = Math.min(parseFloat(pos.mae), pnl);
+
+        // Persist to DB
+        await this.paperPositionsRepo.update(pos.id, {
+          unrealized_pnl: pnl.toFixed(2),
+          mfe: mfe.toFixed(2),
+          mae: mae.toFixed(2),
+        });
+
+        // Check SL hit
+        if (pos.current_sl) {
+          const sl = parseFloat(pos.current_sl);
+          const slHit = pos.direction === 'LONG' ? ltp <= sl : ltp >= sl;
+          if (slHit) {
+            this.logger.log(
+              `[PaperMonitor] SL hit — pos=${pos.id.slice(0, 8)} ltp=₹${ltp} sl=₹${sl}`,
+            );
+            await this.forcePaperClose(pos, ltp, 'SL_HIT');
+            continue;
+          }
+        }
+
+        // Check target hit
+        if (pos.target_price) {
+          const target = parseFloat(pos.target_price);
+          const targetHit = pos.direction === 'LONG' ? ltp >= target : ltp <= target;
+          if (targetHit) {
+            this.logger.log(
+              `[PaperMonitor] Target hit — pos=${pos.id.slice(0, 8)} ltp=₹${ltp} target=₹${target}`,
+            );
+            await this.forcePaperClose(pos, ltp, 'TARGET_HIT');
+          }
+        }
+      } catch (err) {
+        this.logger.debug(
+          `[PaperMonitor] Error updating position ${pos.id}: ${(err as Error).message}`,
+        );
+      }
+    }
+  }
+
+  /**
+   * EOD mandatory square-off at 15:25 IST — close all open paper positions
+   * at the last available market price.
+   *
+   * Fires 5 minutes before mandatory exchange close to ensure all paper
+   * positions are closed with a known price before data stops flowing.
+   */
+  @Cron('25 15 * * 1-5', { timeZone: 'Asia/Kolkata' })
+  async eodSquareOff(): Promise<void> {
+    const openPositions = await this.paperPositionsRepo.find({ where: { is_open: true } });
+    if (openPositions.length === 0) {
+      this.logger.log('[PaperEngine] EOD 15:25: no open positions to square off');
+      return;
+    }
+
+    this.logger.log(
+      `[PaperEngine] EOD 15:25 IST — force-closing ${openPositions.length} paper position(s)`,
+    );
+
+    for (const pos of openPositions) {
+      try {
+        let ltp = parseFloat(pos.average_entry_price); // fallback to entry price
+        const securityId = this.securityIdCache.get(pos.instrument_id);
+        if (securityId) {
+          const raw = await this.redisService.get(`mkt:snapshot:${securityId}`);
+          if (raw) {
+            const parsed = parseFloat((JSON.parse(raw) as { ltp: string }).ltp);
+            if (parsed > 0) ltp = parsed;
+          }
+        }
+        await this.forcePaperClose(pos, ltp, 'EOD_MANDATORY_EXIT');
+      } catch (err) {
+        this.logger.error(
+          `[PaperEngine] EOD close failed for pos=${pos.id}: ${(err as Error).message}`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Force-close a paper position at the given price without going through the
+   * full order simulation pipeline. Used for SL hit, target hit, and EOD square-off.
+   */
+  private async forcePaperClose(
+    pos: PaperPosition,
+    exitPrice: number,
+    reason: string,
+  ): Promise<void> {
+    const entryPrice = parseFloat(pos.average_entry_price);
+    const costs = this.chargesService.calculate(entryPrice, exitPrice, pos.quantity);
+    const grossPnl =
+      pos.direction === 'LONG'
+        ? (exitPrice - entryPrice) * pos.quantity
+        : (entryPrice - exitPrice) * pos.quantity;
+    const netPnl = grossPnl - costs.total;
+    const now = new Date();
+
+    // Close position
+    await this.paperPositionsRepo.update(pos.id, {
+      is_open: false,
+      closed_at: now,
+      unrealized_pnl: '0',
+    });
+
+    // Record PaperTrade
+    const trade = this.paperTradesRepo.create({
+      engine: 'PAPER',
+      position_id: pos.id,
+      instrument_id: pos.instrument_id,
+      strategy_id: null,
+      signal_id: pos.signal_id,
+      direction: pos.direction as 'LONG' | 'SHORT',
+      quantity: pos.quantity,
+      lot_size: 1,
+      entry_price: entryPrice.toFixed(2),
+      exit_price: exitPrice.toFixed(2),
+      entry_time: pos.opened_at,
+      exit_time: now,
+      mfe: pos.mfe,
+      mae: pos.mae,
+      gross_pnl: grossPnl.toFixed(2),
+      brokerage: costs.brokerage.toFixed(4),
+      stt: costs.stt.toFixed(4),
+      exchange_charges: costs.exchangeCharges.toFixed(4),
+      gst: costs.gst.toFixed(4),
+      sebi_charges: costs.sebiCharges.toFixed(4),
+      stamp_duty: costs.stampDuty.toFixed(4),
+      net_pnl: netPnl.toFixed(2),
+      exit_reason: reason,
+      execution_slippage: '0',
+      signal_score: null,
+      dhan_entry_order_id: null,
+      dhan_exit_order_id: null,
+      qcr: null,
+      exit_classification: null,
+      execution_quality: null,
+    });
+    const savedTrade = await this.paperTradesRepo.save(trade);
+
+    // Update portfolio balance
+    const currentBalance = parseFloat(await this.getPortfolioBalance());
+    const newBalance = (currentBalance + netPnl).toFixed(2);
+    await this.redisService.set(PAPER_PORTFOLIO_BALANCE_KEY, newBalance);
+
+    // Emit for DailyLossStateMachine
+    this.eventEmitter.emit(PAPER_TRADE_CLOSED_EVENT, {
+      engine: 'PAPER',
+      netPnl: savedTrade.net_pnl,
+      tradeId: savedTrade.id,
+    });
+
+    // Evict from securityId cache so position is no longer monitored
+    this.securityIdCache.delete(pos.instrument_id);
+
+    this.logger.log(
+      `[PaperEngine] Closed pos=${pos.id.slice(0, 8)} reason=${reason} ` +
+        `exit=₹${exitPrice.toFixed(2)} netPnL=₹${netPnl.toFixed(2)} balance=₹${newBalance}`,
+    );
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Public API
@@ -158,12 +395,34 @@ export class PaperTradingService {
       transactionType,
       orderType,
       quantity,
+      lotSize = 1,
       price,
       signalScore,
+      stopLossPrice,
+      targetPrice,
       slippageConfig = DEFAULT_SLIPPAGE_CONFIG,
       rejectionProbability = DEFAULT_REJECTION_PROBABILITY,
       latencyConfig = DEFAULT_LATENCY_CONFIG,
     } = request;
+
+    // ── Lot-size invariant check ──────────────────────────────────────────────
+    // quantity MUST be in units (lots × lotSize).  When lotSize > 1 this guards
+    // against accidental lots-as-units submissions (e.g. 1 lot of NIFTY sent as
+    // quantity=1 instead of quantity=75).
+    if (lotSize > 1 && quantity % lotSize !== 0) {
+      this.logger.error(
+        `[PaperOrder] Rejected: quantity=${quantity} is not a multiple of ` +
+          `lot_size=${lotSize} for instrument=${instrumentId}. ` +
+          `quantity must equal selectedLots × lotSize.`,
+      );
+      return {
+        orderId: `rejected-lot-align-${Date.now()}`,
+        status: 'rejected',
+        rejectionReason:
+          `Quantity ${quantity} is not a valid multiple of lot size ${lotSize} ` +
+          `— quantity must equal selectedLots × lotSize`,
+      };
+    }
 
     // ── Step 1: Idempotency check ────────────────────────────────────────────
     const idempotencyRedisKey = paperOrderIdempotencyKey(idempotencyKey);
@@ -303,6 +562,17 @@ export class PaperTradingService {
       slippageConfig,
     );
 
+    // ── Simulate partial fill (realistic) ────────────────────────────────────
+    // With low probability (5% default when not explicitly configured), simulate
+    // a partial fill where only 50-80% of the order fills initially.
+    // This improves paper trading realism for large orders near the spread.
+    const isLargeOrder = lotSize > 1 && quantity > lotSize;
+    const partialFillProbability = isLargeOrder ? 0.15 : 0.0; // 15% for multi-lot orders
+    const isPartialFill = partialFillProbability > 0 && Math.random() < partialFillProbability;
+    const actualFillQty = isPartialFill
+      ? Math.max(lotSize, Math.floor(quantity * (0.5 + Math.random() * 0.3))) // 50-80%
+      : quantity;
+
     const fillTimestamp = new Date();
 
     // ── Step 8: Persist PaperExecution ───────────────────────────────────────
@@ -311,15 +581,15 @@ export class PaperTradingService {
       engine: 'PAPER',
       dhan_trade_id: null,
       fill_price: fillPrice.toFixed(2),
-      fill_quantity: quantity,
+      fill_quantity: actualFillQty, // actual fill (may be partial)
       fill_timestamp: fillTimestamp,
       slippage: slippageAmount.toFixed(4),
     });
     const savedExecution = await this.paperExecutionsRepo.save(paperExecution);
 
     // ── Step 9: Update PaperOrder to 'complete' ───────────────────────────────
-    savedOrder.status = 'complete';
-    savedOrder.filled_quantity = quantity;
+    savedOrder.status = actualFillQty < quantity ? 'partial' : 'complete';
+    savedOrder.filled_quantity = actualFillQty;
     savedOrder.average_fill_price = fillPrice.toFixed(2);
     await this.paperOrdersRepo.save(savedOrder);
 
@@ -329,20 +599,31 @@ export class PaperTradingService {
       strategyId ?? null,
       signalId ?? null,
       transactionType,
-      quantity,
+      actualFillQty,
       fillPrice,
       fillTimestamp,
       slippageAmount,
+      lotSize,
       signalScore,
+      stopLossPrice,
+      targetPrice,
     );
 
-    // ── Step 11: Update portfolio balance if trade closed ─────────────────────
+    // ── Step 11: Update portfolio balance + emit trade-closed event ──────────
     let portfolioBalance = await this.getPortfolioBalance();
     if (tradeClosed && closedTrade) {
       const netPnl = parseFloat(closedTrade.net_pnl);
       const currentBalance = parseFloat(portfolioBalance);
       portfolioBalance = (currentBalance + netPnl).toFixed(2);
       await this.redisService.set(PAPER_PORTFOLIO_BALANCE_KEY, portfolioBalance);
+
+      // Emit trade-closed event so DailyLossStateMachineService.onTradeClosed()
+      // can count losing trades and potentially activate TWO_LOSS_LOCKOUT.
+      this.eventEmitter.emit(PAPER_TRADE_CLOSED_EVENT, {
+        engine: 'PAPER',
+        netPnl: closedTrade.net_pnl,
+        tradeId: closedTrade.id,
+      });
 
       this.logger.log(
         `[PaperTrade] Trade ${closedTrade.id} closed. Net P&L=${closedTrade.net_pnl}. ` +
@@ -633,7 +914,10 @@ export class PaperTradingService {
     fillPrice: number,
     fillTimestamp: Date,
     slippageAmount: number,
+    lotSize: number,
     signalScore?: number,
+    stopLossPrice?: string,
+    targetPrice?: string,
   ): Promise<{ position: PaperPosition; tradeClosed: boolean; closedTrade: PaperTrade | null }> {
     // Look for an open position in the same instrument (simplistic: one position per instrument)
     const openPosition = await this.paperPositionsRepo.findOne({
@@ -649,8 +933,9 @@ export class PaperTradingService {
         direction: 'LONG',
         quantity,
         average_entry_price: fillPrice.toFixed(2),
-        current_sl: null,
-        target_price: null,
+        // Set SL and target from signal for automatic exit monitoring.
+        current_sl: stopLossPrice && parseFloat(stopLossPrice) > 0 ? stopLossPrice : null,
+        target_price: targetPrice && parseFloat(targetPrice) > 0 ? targetPrice : null,
         trailing_stop_mechanism: null,
         unrealized_pnl: '0',
         mfe: '0',
@@ -700,7 +985,7 @@ export class PaperTradingService {
           signal_id: signalId,
           direction: 'LONG',
           quantity: exitQty,
-          lot_size: 1,
+          lot_size: lotSize, // actual exchange lot size, not hardcoded 1
           entry_price: entryPrice.toFixed(2),
           exit_price: fillPrice.toFixed(2),
           entry_time: savedPosition.opened_at,
@@ -780,7 +1065,7 @@ export class PaperTradingService {
           signal_id: signalId,
           direction: 'SHORT',
           quantity: exitQty,
-          lot_size: 1,
+          lot_size: lotSize, // actual exchange lot size, not hardcoded 1
           entry_price: entryPrice.toFixed(2),
           exit_price: fillPrice.toFixed(2),
           entry_time: savedPosition.opened_at,

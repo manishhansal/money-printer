@@ -161,13 +161,44 @@ export interface PaperOrderRequest {
   transactionType: 'BUY' | 'SELL';
   /** Order variety. */
   orderType: 'MARKET' | 'LIMIT' | 'SL' | 'SL-M';
-  /** Number of units/lots ordered. */
+  /**
+   * Quantity in UNITS (selectedLots × lotSize).
+   *
+   * This MUST equal `selectedLots × lotSize`.  For example, 2 lots of NIFTY
+   * (lot_size=75) → quantity = 150.  The PaperTrade.quantity column stores units.
+   *
+   * Callers (SignalDispatcherService) are responsible for the multiplication.
+   * PaperTradingService validates `quantity % lotSize === 0` when lotSize is provided.
+   */
   quantity: number;
   /**
-   * Limit price (INR string) — required for LIMIT orders; null for MARKET.
-   * This is the reference price the caller expects to fill at.
+   * Exchange-defined contract lot size for this instrument.
+   * Stored in PaperTrade.lot_size for analytics and correct P&L display.
+   * When provided, PaperTradingService validates `quantity % lotSize === 0`.
+   * Optional for backward compatibility with callers that only need units.
+   */
+  lotSize?: number;
+  /**
+   * Number of lots selected (informational; used for display and analytics).
+   * The authoritative execution quantity is `quantity` (units) above.
+   */
+  selectedLots?: number;
+  /**
+   * Simulated fill price — either `price` for LIMIT orders or the best
+   * available market snapshot LTP ± slippage for MARKET.
+   * Optional for MARKET orders where the PaperEngine derives fill from Redis.
    */
   price?: string | null;
+  /**
+   * Stop-loss price from the originating signal (INR string).
+   * Stored in PaperPosition.current_sl to enable SL monitoring.
+   */
+  stopLossPrice?: string;
+  /**
+   * Target/take-profit price from the originating signal (INR string).
+   * Stored in PaperPosition.target_price to enable target monitoring.
+   */
+  targetPrice?: string;
   /**
    * Composite signal score at order time (0–100).
    * Used for PaperTrade analytics (signal_score column).
