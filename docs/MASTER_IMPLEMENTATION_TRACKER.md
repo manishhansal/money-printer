@@ -1,5 +1,195 @@
 # MoneyPrinter — Master Implementation Tracker
-**Last updated:** 2026-11-12 (All sessions complete — final state)
+**Last updated:** 2026-11-13 (Phase 0/1/2/3 implementation + System Reliability Fixes)
+**Repository:** money-printer (feat/money-printer branch, also origin/main)
+**HEAD:** `f1cac30` (working tree has uncommitted changes — see Phase 5 below)
+**Test count:** 1,729 backend (67 suites) + 53 extension = **1,782 total** (all passing)
+
+---
+
+## Cumulative Defect Registry — All Sessions (Updated 2026-11-13)
+
+| ID | Severity | Description | Status |
+|---|---|---|---|
+| P0-CRIT-001 | P0 | Quantity in lots instead of units | FIXED_AND_VERIFIED |
+| P0-CRIT-002 | P0 | Broker before DB in placeOrder() | FIXED_AND_VERIFIED |
+| P0-CRIT-003 | P0 | Seed scripts default lot_size to 1 | FIXED_AND_VERIFIED |
+| P0-CRIT-004 | P0 | Seed scripts ON CONFLICT DO NOTHING preserves stale lot_size | FIXED_AND_VERIFIED |
+| P1-HIGH-001 | P1 | CLOSING phase at 14:30 blocks entries too early | FIXED_AND_VERIFIED |
+| P1-HIGH-002 | P1 | popup.ts hardcodes localhost:3002 | FIXED_AND_VERIFIED |
+| DEFECT-001 (P0) | P0 | engine: 'PAPER' hardcoded in scanner — live pipeline unreachable | FIXED_AND_VERIFIED |
+| DEFECT-002 (P1) | P1 | entryConditionsMet always true — no real entry logic | **GENUINELY FIXED** via StrategyEntryConditionsService |
+| DEFECT-003 (P1) | P1 | momentum=8, vwapTrendAlignment=8 hardcoded heuristics | FIXED (ADX/ROC/RelVol now used) |
+| DEFECT-004 (P2) | P2 | processTick() DB query on every tick | FIXED_AND_VERIFIED |
+| DEFECT-005 (P0) | P0 | No historical options data for backtesting | **INFRASTRUCTURE COMPLETE** (data fetch required) |
+| DEFECT-006 (P1) | P1 | Agent orchestrator untested | PARTIALLY_FIXED |
+| DEFECT-007 (P1) | P1 | Signal scanner and dispatcher untested | FIXED_AND_VERIFIED |
+| DEFECT-008 (P2) | P2 | No integration test suite | FIXED_AND_VERIFIED |
+| DEFECT-009 (P2) | P2 | Square-off relies on stale trading symbol | FIXED_AND_VERIFIED |
+| DEFECT-010 (P1) | P1 | Compliance gate needs historical data | BLOCKED_EXTERNAL |
+| DEFECT-011 (P1) | P1 | dispatchToLive uses uuidv4() as idempotency key | FIXED_AND_VERIFIED |
+| DEFECT-012 (P1) | P1 | Concurrent strategy evals bypass duplicate-order check | FIXED_AND_VERIFIED |
+| DEFECT-013 (P2) | P2 | modifyOrder/cancelOrder broker before DB | FIXED_AND_VERIFIED |
+| DEFECT-014 (P1) | P1 | Risk engine suggestedQuantity never used — always 1 lot | FIXED_AND_VERIFIED |
+| DEFECT-015 (P2) | P2 | Correlated exposure uses wrong positions | OPEN (documented safe conservative) |
+| DEFECT-016 (P3) | P3 | Paper idempotency key appends Date.now() | FIXED_AND_VERIFIED |
+| DEFECT-017 (P3) | P3 | Dispatcher mock missing getArmedState | FIXED_AND_VERIFIED |
+| ARCH-001 | P0 | Scanner evaluates OPTIONS first, not underlying | **FIXED** via UnderlyingMomentumScannerService |
+| GAP-001 | P1 | India VIX hardcoded to 15 (HIGH_VOL never fires) | OPEN |
+| GAP-002 | P1 | Market breadth is a proxy (not real advance/decline) | OPEN |
+| GAP-003 | P1 | events:tick channel not published from DhanWebSocket | OPEN |
+| GAP-004 | P1 | No dynamic instrument universe discovery | OPEN |
+| GAP-005 | P1 | No expiry management (expired contracts scanned) | **FIXED** via ExpiryManagementService |
+| GAP-006 | P2 | Near-ATM filter 10% strike distance too broad | IMPROVED (5% in new scanner) |
+| GAP-007 | P2 | No ADX/ROC indicators | **FIXED** (computeADX, computeROC added) |
+| GAP-008 | P2 | No multi-timeframe analysis | **FIXED** (getMultiTimeframeCandles, 1m/5m/15m/1d) |
+| GAP-009 | P2 | No relative strength vs NIFTY for F&O stocks | **FIXED** (computeRelativeStrength added) |
+| GAP-010 | P2 | Rolling options API endpoint missing | **FIXED** (getRollingOptionData, full types, entity, backfill service) |
+| IMPROVEMENT-001 | P2 | Deep OTM instruments (0% win rate) included in scan | IMPLEMENTED |
+| IMPROVEMENT-002 | P2 | CE and PE both traded regardless of regime direction | IMPLEMENTED |
+| IMPROVEMENT-003 | P2 | RSI 25–75 filter too broad for options | IMPLEMENTED |
+
+---
+
+## Phase 0 — Baseline Forensic Reconciliation (COMPLETE 2026-11-13)
+
+**Verified baseline at HEAD f1cac30:**
+- Tests: 1,661 passing (confirmed by actual `npx jest` run)
+- TypeScript: clean (zero errors)
+- ESLint: clean
+- Server: not running
+
+**Report inconsistencies resolved:**
+- Previous reports cited 1,601/1,641/1,661 and commit SHAs 915f5f3/5d9fd24. Actual HEAD: f1cac30, 1,661 tests at baseline.
+- DEFECT-002 "FIXED_AND_VERIFIED" in prior reports was **incorrect** — all 8 strategies still used identical RSI logic. Genuinely fixed now.
+- DEFECT-003 "FIXED_AND_VERIFIED" was partially correct (RSI/VWAP scores computed) but `optionsFuturesConfirmation` still used bid/ask spread. Now improved.
+- ARCH-001 (scanner evaluating options first) was not documented in prior reports. Now fixed.
+
+---
+
+## Phase 1 — Trading Universe and Expiry Discovery (COMPLETE)
+
+| Task | Status | File |
+|------|--------|-------|
+| Dynamic expiry discovery | COMPLETE | `expiry-management.service.ts` |
+| Weekly index expiry eligibility | COMPLETE | `ExpiryManagementService.getCurrentWeeklyExpiry()` |
+| Monthly stock option eligibility | COMPLETE | `ExpiryManagementService.getCurrentMonthlyExpiry()` |
+| Holiday-adjusted expiry (via live Dhan list) | COMPLETE | `classifyExpiry()` with ±3-day tolerance |
+| hasWeeklyContract() validation | COMPLETE | |
+| Expiry management tests (13 tests) | COMPLETE | `expiry-management.service.spec.ts` |
+
+---
+
+## Phase 2 — Dhan Historical Data Integration (INFRASTRUCTURE COMPLETE)
+
+| Task | Status | File |
+|------|--------|-------|
+| `/v2/charts/rollingoption` API types | COMPLETE | `dhan-api.types.ts` |
+| `getRollingOptionData()` in DhanApiClient | COMPLETE | `dhan-api.client.ts` |
+| `RollingOptionCandles` entity | COMPLETE | `rolling-option-candles.entity.ts` |
+| DB migration for rolling_option_candles | COMPLETE | `1800000000003-AddRollingOptionCandles.ts` |
+| `DhanRollingOptionBackfillService` | COMPLETE | `dhan-rolling-option-backfill.service.ts` |
+| Backfill tests (18 tests) | COMPLETE | `dhan-rolling-option-backfill.service.spec.ts` |
+| HTTP endpoint (`POST /backtest/rolling-backfill`) | ❌ OPEN | Needs to be wired in BacktestController |
+| Underlying OHLCV historical data | ❌ OPEN | Data fetch required (existing service available) |
+| Actual rolling options data fetch | ❌ OPEN | Requires running backfill with Dhan credentials |
+| Coverage validation | ❌ OPEN | After data fetch |
+
+---
+
+## Phase 3 — Momentum Strategy Implementation (COMPLETE)
+
+| Task | Status | File |
+|------|--------|-------|
+| ADX (+DI/-DI) indicator | COMPLETE | `technical-analysis.service.ts` |
+| Rate of Change (ROC) indicator | COMPLETE | `technical-analysis.service.ts` |
+| EMA50 and RelativeStrength | COMPLETE | `technical-analysis.service.ts` |
+| Configurable ORB window (5/15/30 min) | COMPLETE | `computeORBRange(candles, sessionStart, windowMinutes)` |
+| Multi-timeframe candle loading | COMPLETE | `CandleQueryService.getMultiTimeframeCandles()` |
+| Previous-day high/low levels | COMPLETE | `CandleQueryService.getPreviousDayHighLow()` |
+| Strategy A — Opening Range Breakout | COMPLETE | `StrategyEntryConditionsService.evaluateORB()` |
+| Strategy B — VWAP Reclaim / Rejection | COMPLETE | `StrategyEntryConditionsService.evaluateVWAPReclaim()` |
+| Strategy C — Momentum Expansion | COMPLETE | `StrategyEntryConditionsService.evaluateMomentumExpansion()` |
+| Strategy D — Breakout and Retest | COMPLETE | `StrategyEntryConditionsService.evaluateBreakoutRetest()` |
+| Strategy E — Relative Strength / Weakness | COMPLETE | `StrategyEntryConditionsService.evaluateRelativeStrength()` |
+| Strategy F — Trend Continuation | COMPLETE | `StrategyEntryConditionsService.evaluateTrendContinuation()` |
+| Underlying-first scanner architecture | COMPLETE | `UnderlyingMomentumScannerService` |
+| Multi-timeframe confirmation (5m) | COMPLETE | `checkMultiTimeframeConfirmation()` |
+| Candidate scoring and ranking | COMPLETE | `scoreCandidate()` |
+| Strategy entry conditions tests (45 tests) | COMPLETE | `strategy-entry-conditions.service.spec.ts` |
+
+---
+
+## Phase 5 — System Reliability & Infrastructure Fixes (COMPLETE)
+
+### 5.1 Watchdog P1/P2 Issues Resolved
+
+| Task | Status | File |
+|------|--------|-------|
+| Fix `health:dhan_last_checked_at` missing writer (P2 `dhan_health_check_stale`) | COMPLETE | `system-health-monitor.service.ts` |
+| Fix boot-time race: seed Redis health keys on `onModuleInit()` (P1 `backend_degraded`) | COMPLETE | `system-health-monitor.service.ts` |
+| Fix `approveAndExecute()` not persisting RESOLVED to DB | COMPLETE | `auto-remediation.service.ts` |
+| Update `system-health-monitor.service.spec.ts` assertions (7 Redis.set calls) | COMPLETE | `system-health-monitor.service.spec.ts` |
+| Confirm P0=0, P1=0, P2=0, P3=0 watchdog post-fix | COMPLETE | Verified live at 10:07 IST |
+
+### 5.2 Market Regime Classification Fix (UNSTABLE → SIDEWAYS/WEAK_BULL/etc.)
+
+**Root cause:** Dhan's IDX_I WebSocket feed never delivers ticks for NIFTY (secId=13) or BANKNIFTY (secId=25). `mkt:snapshot:13` was never written → `buildRegimeInputsFromRedis()` returned null → regime stayed `UNSTABLE` → signal scanner skipped all instruments with `skipped_direction=N`.
+
+| Task | Status | File |
+|------|--------|-------|
+| Add `DhanApiModule` import to `MarketRegimeModule` | COMPLETE | `market-regime.module.ts` |
+| Add `pollIndexLtp()` 30s cron — REST `getLtp({IDX_I:[13,25]})` → Redis TTL=90s | COMPLETE | `market-regime.service.ts` |
+| Add `buildRegimeInputsFromOptions()` put-call parity fallback using flowing options | COMPLETE | `market-regime.service.ts` |
+| Update `updateRegime()` to 3-tier priority: REST → options parity → stale reuse | COMPLETE | `market-regime.service.ts` |
+| Add `loadNearATMOptionPairs()` / `isMarketHoursNow()` helpers | COMPLETE | `market-regime.service.ts` |
+| Fix volume proxy (`800000` = 0.8 relative vol, avoids false LOW_VOL) | COMPLETE | `market-regime.service.ts` |
+| Update spec mocks: `DhanApiClient` + `DataSource` | COMPLETE | `market-regime.service.spec.ts` |
+| Confirm `regime:current = "SIDEWAYS"` live at 13:40 IST | COMPLETE | Redis verified |
+
+### 5.3 Live Market Monitor Script
+
+| Task | Status | File |
+|------|--------|-------|
+| `scripts/monitor.py` — 2-min polling loop until 15:30 IST | COMPLETE | `scripts/monitor.py` |
+| Covers: health, signals, paper positions, portfolio P&L, stats, watchdog | COMPLETE | |
+
+---
+
+## Phase 4 — Option Selection and Risk Integration (PARTIAL)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| CE/PE mapping from underlying direction | COMPLETE | In `UnderlyingMomentumScannerService.dispatchCandidate()` |
+| ATM strike selection | COMPLETE | `findNearestOptionContract()` using parseFloat(strikePrice) |
+| Expiry-aware selection | COMPLETE | Via `ExpiryManagementService` |
+| 5% near-ATM filter | COMPLETE | Replaces old 10% filter |
+| Liquidity validation (option LTP ≥ ₹10) | COMPLETE | In `dispatchCandidate()` |
+| Proper stop/target on underlying option | COMPLETE | 1.5% SL, 3% target on option premium |
+| Strike selection via delta range | ❌ OPEN | Delta not available without live option chain |
+
+---
+
+## Phases 5–8 (PENDING)
+
+| Phase | Status | Blocking |
+|-------|--------|---------|
+| Phase 5 — Event-driven backtest engine | ❌ OPEN | Requires historical data first |
+| Phase 6 — Strategy optimization & robustness | ❌ OPEN | Requires Phase 5 |
+| Phase 7 — Paper trading (live forward validation) | ❌ OPEN | Requires all scanners wired to paper engine |
+| Phase 8 — Production readiness review | ❌ OPEN | Requires all prior phases |
+
+---
+
+## Test Count Summary
+
+| Commit | Tests | Notes |
+|--------|-------|-------|
+| Baseline f1cac30 | 1,661 | Confirmed by actual run |
+| After Phase 2/3 (prev session) | **1,729** | +68 new tests |
+| After Phase 5 reliability fixes | **1,729** | Zero regressions (spec mocks updated, no net count change) |
+| Extension tests | 53 | Unchanged |
+| **Total** | **1,782** | All passing |
+
 **Repository:** money-printer (feat/money-printer branch)
 **HEAD:** `915f5f3` (working tree has additional changes not yet committed)
 **Test count:** 1,661 backend + 53 extension = **1,714 total** (all passing)
@@ -36,6 +226,11 @@
 | IMPROVEMENT-001 | P2 | Deep OTM instruments (0% win rate) included in scan | IMPLEMENTED (near-ATM filter) |
 | IMPROVEMENT-002 | P2 | CE and PE both traded regardless of regime direction | IMPLEMENTED (directional filter) |
 | IMPROVEMENT-003 | P2 | RSI 25–75 filter too broad for options | IMPLEMENTED (RSI≥55 for directional) |
+| INFRA-001 | P1 | `health:dhan_last_checked_at` Redis key read but never written — permanently stale | **FIXED** (`SystemHealthMonitorService.pollHealth()` now writes it; `onModuleInit()` seeds it) |
+| INFRA-002 | P1 | WebSocket IDX_I feed returns no ticks for NIFTY/BANKNIFTY index securityIds | **FIXED** (`pollIndexLtp()` 30s REST cron writes `mkt:snapshot:13/25` with TTL=90s) |
+| INFRA-003 | P2 | `approveAndExecute()` sets `FIX_IN_PROGRESS` in DB but never persists `RESOLVED` | **FIXED** (now saves final status after `executePlan()`) |
+| INFRA-004 | P1 | Regime stays `UNSTABLE` on boot — 15s watchdog fires before 30s `pollHealth()` cron | **FIXED** (`SystemHealthMonitorService.onModuleInit()` seeds all health keys immediately) |
+| INFRA-005 | P1 | Market regime permanently `UNSTABLE` → scanner skips all instruments (`skipped_direction=N`) | **FIXED** via REST LTP polling (primary) + put-call parity options fallback (secondary) |
 
 ---
 

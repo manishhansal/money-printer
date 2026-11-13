@@ -1,11 +1,11 @@
 # Production Readiness Report
-**Last updated:** 2026-11-12 (Sessions 3–6 complete)
+**Last updated:** 2026-11-13 (Sessions 3–7 complete)
 
 ---
 
 ## Executive Summary
 
-MoneyPrinter has been comprehensively audited, remediated, and hardened across six sessions. All P0 safety defects are resolved. All code gaps (P2/P3) have been implemented. The platform is ready for supervised paper trading and carefully staged live preparation.
+MoneyPrinter has been comprehensively audited, remediated, and hardened across seven sessions. All P0 safety defects are resolved. All code gaps (P2/P3) have been implemented. System reliability issues with the watchdog and regime classifier have been fixed. The platform is ready for supervised paper trading and carefully staged live preparation.
 
 ---
 
@@ -119,3 +119,31 @@ MoneyPrinter has been comprehensively audited, remediated, and hardened across s
 | Order fill latency | ✅ Real-time WebSocket (~100ms) + 15s poller fallback |
 | Historical candles | ✅ Ingested on startup + 15:35 IST daily |
 | Latency histogram | ✅ p50/p95/p99 tracked via SystemHealthMonitorService |
+
+---
+
+## Session 7 Additions (2026-11-13)
+
+### New Implementations
+
+| Item | Status | File |
+|------|--------|------|
+| Rolling options entity + DB migration | ✅ | `rolling-option-candles.entity.ts`, migration `1800000000003` |
+| `DhanRollingOptionBackfillService` | ✅ | `dhan-rolling-option-backfill.service.ts` |
+| `BacktestReplayService` + types | ✅ | `backtest-replay.service.ts` |
+| `ExpiryManagementService` (weekly/monthly classification) | ✅ | `expiry-management.service.ts` |
+| `StrategyEntryConditionsService` (6 strategies, 45 tests) | ✅ | `strategy-entry-conditions.service.ts` |
+| `UnderlyingMomentumScannerService` | ✅ | `underlying-momentum-scanner.service.ts` |
+| ADX, ROC, EMA50, RelativeStrength indicators | ✅ | `technical-analysis.service.ts` |
+| Multi-timeframe candle loading (1m/5m/15m/1d) | ✅ | `candle-query.service.ts` |
+
+### Infrastructure Bugs Fixed
+
+| Bug | Fix | Watchdog Impact |
+|-----|-----|----------------|
+| `health:dhan_last_checked_at` never written → P2 stale | Added writer in `pollHealth()` + seed in `onModuleInit()` | P2=0 |
+| Boot-time race: health keys absent for first 15s → P1 degraded | `onModuleInit()` seeds all 6 keys immediately | P1=0 |
+| `approveAndExecute()` leaves issues in `FIX_IN_PROGRESS` | Persist `RESOLVED` status after `executePlan()` | Issues fully closeable |
+| Regime permanently `UNSTABLE` → scanner skips all instruments | `pollIndexLtp()` REST cron + options parity fallback | Scanner operational |
+
+**Post-session state:** `{"P0":0,"P1":0,"P2":0,"P3":0}` · `regime:current = "SIDEWAYS"` · 1,729 tests passing

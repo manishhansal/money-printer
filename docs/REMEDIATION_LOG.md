@@ -262,3 +262,34 @@ OOS profit factor: 1.92. OOS win rate exceeds 33.3% break-even threshold.
 - `scripts/run-backtest-simulation.ts`
 - `scripts/run-targeted-backfill.ts`
 - `scripts/run-expanded-backfill.ts`
+
+---
+
+## Session 7 — Phase 5: System Reliability & Infrastructure Fixes (2026-11-13)
+
+### 5.1 Watchdog P1/P2 Defects Fixed
+
+| ID | File | Defect | Fix |
+|----|------|--------|-----|
+| INFRA-001 | `system-health-monitor.service.ts` | `health:dhan_last_checked_at` Redis key read by `checkDhanConnectivity()` but never written anywhere → `ageMs = Infinity` → permanently stale | Added write of `health:dhan_last_checked_at` with TTL=90s in `pollHealth()` |
+| INFRA-004 | `system-health-monitor.service.ts` | Boot-time race: watchdog fires at T+15s, `pollHealth()` cron fires at T+30s — health keys absent → "Dhan: unknown" → P1 `backend_degraded` | Added `onModuleInit()` that seeds all 6 health keys + `dhan_last_checked_at` immediately at boot |
+| INFRA-003 | `auto-remediation.service.ts` | `approveAndExecute()` calls `executePlan()` (which saves `FIX_IN_PROGRESS`), returns result with `newStatus: 'RESOLVED'`, but never persists it — issues stuck in `FIX_IN_PROGRESS` permanently | Now saves `status = 'RESOLVED'` to DB after successful `executePlan()` |
+
+**Result:** Watchdog went from P1=1, P2=1 to **P0=0, P1=0, P2=0, P3=0** post-fix.
+
+### 5.2 Market Regime UNSTABLE Fix
+
+| ID | File | Defect | Fix |
+|----|------|--------|-----|
+| INFRA-002 | `market-regime.service.ts` | Dhan IDX_I WebSocket feed never returns ticks for NIFTY (secId=13) / BANKNIFTY (secId=25) → `mkt:snapshot:13` absent → `buildRegimeInputsFromRedis()` returns null → regime permanently `UNSTABLE` → scanner skips all instruments (`skipped_direction=N`) | Added `pollIndexLtp()` 30s cron calling `dhanApiClient.getLtp({IDX_I:[13,25]})` REST endpoint; writes `mkt:snapshot:13` with TTL=90s, `volume='800000'` (neutral relVol=0.8 to avoid false LOW_VOL) |
+| INFRA-002b | `market-regime.service.ts` | No fallback if REST also fails for IDX_I | Added `buildRegimeInputsFromOptions()` put-call parity fallback using flowing NIFTY options |
+| INFRA-002c | `market-regime.module.ts` | `DhanApiClient` not injected into `MarketRegimeModule` | Added `DhanApiModule` import |
+| INFRA-002d | `market-regime.service.spec.ts` | Tests broke: missing `DhanApiClient` and `DataSource` mocks | Added mock providers for both |
+
+**Result:** `regime:current` changed from permanently `"UNSTABLE"` to live `"SIDEWAYS"` classification. Scanner now evaluates instruments.
+
+### Tests Affected
+- `system-health-monitor.service.spec.ts`: Updated assertion `toHaveBeenCalledTimes(6)` → `(7)` + added `dhan_last_checked_at` assertion
+- `market-regime.service.spec.ts`: Added `DhanApiClient` + `DataSource` mock providers
+
+**Test count after fixes:** 1,729 passing (zero regressions)
