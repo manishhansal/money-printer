@@ -22,24 +22,30 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { BacktestService } from './backtest.service';
 import { BacktestController } from './backtest.controller';
 import { DhanHistoricalBackfillService } from './dhan-historical-backfill.service';
+import { DhanRollingOptionBackfillService } from './dhan-rolling-option-backfill.service';
 import { TradingChargesModule } from '../charges/trading-charges.module';
 import { DhanApiModule } from '../dhan/dhan-api.module';
 import { Trade } from '../../database/entities/trades.entity';
 import { PaperTrade } from '../../database/entities/paper-trades.entity';
 import { HistoricalCandles } from '../../database/entities/historical-candles.entity';
+import { RollingOptionCandles } from '../../database/entities/rolling-option-candles.entity';
 import { Instruments } from '../../database/entities/instruments.entity';
 
 @Module({
   imports: [
     TradingChargesModule,
-    // DhanApiModule: provides DhanApiClient for DhanHistoricalBackfillService.
+    // DhanApiModule: provides DhanApiClient for both backfill services.
     DhanApiModule,
-    // Trade + PaperTrade: existing backtest historical endpoint.
-    // HistoricalCandles + Instruments: needed by DhanHistoricalBackfillService.
-    TypeOrmModule.forFeature([Trade, PaperTrade, HistoricalCandles, Instruments]),
+    TypeOrmModule.forFeature([
+      Trade,
+      PaperTrade,
+      HistoricalCandles,
+      RollingOptionCandles,
+      Instruments,
+    ]),
   ],
   controllers: [BacktestController],
-  providers: [BacktestService, DhanHistoricalBackfillService],
-  exports: [BacktestService, DhanHistoricalBackfillService],
+  providers: [BacktestService, DhanHistoricalBackfillService, DhanRollingOptionBackfillService],
+  exports: [BacktestService, DhanHistoricalBackfillService, DhanRollingOptionBackfillService],
 })
 export class BacktestModule {}

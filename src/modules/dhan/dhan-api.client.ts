@@ -49,6 +49,8 @@ import {
   DhanQuoteRequest,
   DhanQuoteResponse,
   DhanRateLimitQueueFullError,
+  DhanRollingOptionRequest,
+  DhanRollingOptionResponse,
   DhanSuperOrderRequest,
   DhanSuperOrderResponse,
   DhanTradebookResponse,
@@ -909,6 +911,39 @@ export class DhanApiClient implements OnModuleDestroy {
     request: DhanMarginCalculatorRequest,
   ): Promise<DhanMarginCalculatorResponse> {
     return this.request<DhanMarginCalculatorResponse>('POST', '/v2/margincalculator', request);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Rolling / Expired Options Historical Data
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Fetch rolling ATM-relative historical option data.
+   *
+   * Maps to POST /v2/charts/rollingoption.
+   *
+   * Returns up to 30 days of historical OHLCV, IV, OI and spot data for an
+   * option contract defined by its ATM-relative strike offset and expiry type.
+   * Data is "rolling": at each candle the ATM strike is the nearest available
+   * strike to the underlying spot at that timestamp, and the requested offset
+   * (e.g. ATM-2) describes the position relative to that rolling ATM.
+   *
+   * Key constraints:
+   *   - Window per request: maximum 30 calendar days (toDate is non-inclusive).
+   *   - Index options (OPTIDX): strike range ATM-10 to ATM+10.
+   *   - Stock options (OPTSTK): strike range ATM-3 to ATM+3.
+   *   - Intervals supported: 1, 5, 15, 25, 60 minutes.
+   *   - History available: up to 5 years (Dhan documentation claim; validate empirically).
+   *
+   * Include 'strike' in requiredData to get the absolute strike per candle,
+   * and 'spot' to get the underlying price — both are essential for backtesting.
+   *
+   * Official docs: https://dhanhq.co/docs/v2/expired-options-data/
+   */
+  async getRollingOptionData(
+    request: DhanRollingOptionRequest,
+  ): Promise<DhanRollingOptionResponse> {
+    return this.request<DhanRollingOptionResponse>('POST', '/v2/charts/rollingoption', request);
   }
 }
 
