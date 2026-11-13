@@ -146,7 +146,19 @@
 | Update spec mocks: `DhanApiClient` + `DataSource` | COMPLETE | `market-regime.service.spec.ts` |
 | Confirm `regime:current = "SIDEWAYS"` live at 13:40 IST | COMPLETE | Redis verified |
 
-### 5.3 Live Market Monitor Script
+### 5.3 Four Remaining Gaps Fixed (GAP-001 to GAP-004)
+
+| Task | Status | File |
+|------|--------|-------|
+| India VIX live feed — fetch secId=36 via REST, write `mkt:snapshot:36` TTL=90s | COMPLETE | `market-regime.service.ts` |
+| Real market breadth — `computeMarketBreadth()` from flowing snapshot/dayopen keys | COMPLETE | `market-regime.service.ts` |
+| `POST /backtest/rolling-backfill` wired to `DhanRollingOptionBackfillService` | COMPLETE | `backtest.controller.ts` |
+| `expiryCode` 0→1-indexed fix (Dhan API uses 1=current, not 0) | COMPLETE | `dhan-api.types.ts`, `dhan-rolling-option-backfill.service.ts` |
+| `POST /backtest/replay` wired to `BacktestReplayService.runReplay()` | COMPLETE | `backtest.controller.ts` |
+| `TechnicalAnalysisModule` + `StrategyEntryConditionsService` added to `BacktestModule` | COMPLETE | `backtest.module.ts` |
+| Backfill confirmed functional (DH-901 auth = account subscription required, not code bug) | DOCUMENTED | — |
+
+### 5.4 Live Market Monitor Script
 
 | Task | Status | File |
 |------|--------|-------|
@@ -231,6 +243,10 @@
 | INFRA-003 | P2 | `approveAndExecute()` sets `FIX_IN_PROGRESS` in DB but never persists `RESOLVED` | **FIXED** (now saves final status after `executePlan()`) |
 | INFRA-004 | P1 | Regime stays `UNSTABLE` on boot — 15s watchdog fires before 30s `pollHealth()` cron | **FIXED** (`SystemHealthMonitorService.onModuleInit()` seeds all health keys immediately) |
 | INFRA-005 | P1 | Market regime permanently `UNSTABLE` → scanner skips all instruments (`skipped_direction=N`) | **FIXED** via REST LTP polling (primary) + put-call parity options fallback (secondary) |
+| GAP-001 | P1 | India VIX hardcoded to 15 — HIGH_VOL override (threshold 20) could never fire | **FIXED** — `pollIndexLtp()` now fetches secId=36; `buildRegimeInputsFromRedis()` reads real VIX from `mkt:snapshot:36` |
+| GAP-002 | P1 | Market breadth was a hardcoded ternary on niftyTrend — not real advance/decline | **FIXED** — `computeMarketBreadth()` scans flowing `mkt:snapshot:*/mkt:dayopen:*` for real A/D ratio |
+| GAP-003 | P1 | `POST /backtest/rolling-backfill` endpoint missing — historical options data unreachable | **FIXED** — endpoint wired; also fixed `expiryCode` 0→1-indexed bug; note: requires Dhan historical data subscription (DH-901) |
+| GAP-004 | P1 | Backtest replay engine not wired to any HTTP endpoint | **FIXED** — `POST /backtest/replay` wired to `BacktestReplayService.runReplay()`; `TechnicalAnalysisModule` added to `BacktestModule` |
 
 ---
 

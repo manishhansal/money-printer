@@ -113,8 +113,10 @@ This endpoint does not yet exist in `BacktestController` — it must be wired. T
 | `events:tick:{instrumentId}` channel not published from anywhere | P1 | OPEN |
 | Instrument universe uses static DB rows (no dynamic Dhan master CSV) | P1 | OPEN |
 | BacktestService has no event-driven replay | P0 | OPEN — Phase 5 |
-| No historical options data fetched | P0 | OPEN — data fetch required |
+| No historical options data fetched | P0 | OPEN — requires Dhan historical data subscription (DH-901); code complete |
 | ~~Regime permanently UNSTABLE — scanner skips all instruments~~ | ~~P1~~ | **FIXED** — REST LTP poll + options put-call parity fallback; regime classifies as SIDEWAYS/WEAK_BULL/etc. |
+| ~~India VIX hardcoded to 15~~ | ~~P1~~ | **FIXED** — `pollIndexLtp()` fetches secId=36; real VIX read from `mkt:snapshot:36` |
+| ~~Market breadth is a hardcoded ternary proxy~~ | ~~P2~~ | **FIXED** — `computeMarketBreadth()` from live snapshot/dayopen keys |
 | IDX_I WebSocket feed returns no NIFTY/BANKNIFTY ticks | P1 | ROOT CAUSE IDENTIFIED — mitigated by REST polling |
 
 ---
@@ -128,16 +130,14 @@ This endpoint does not yet exist in `BacktestController` — it must be wired. T
 | Rolling options API types | ✅ |
 | Rolling options DB entity | ✅ |
 | Rolling options backfill service | ✅ |
-| Rolling options backfill HTTP endpoint | ❌ Not wired to controller yet |
+| Rolling options backfill HTTP endpoint | ✅ **`POST /backtest/rolling-backfill` wired** (account subscription required for data) |
 | Underlying OHLCV historical data | ❌ Not fetched |
-| Event-driven scanner replay | ❌ Not built (Phase 5) |
-| Walk-forward OOS splitter | ❌ Not built (Phase 5) |
+| Event-driven scanner replay | ✅ **`POST /backtest/replay` wired** to `BacktestReplayService.runReplay()` |
+| Walk-forward OOS splitter | ✅ Built into `BacktestReplayService` (IS/OOS split + 3 walk-forward windows) |
 
 ### 3.2 Profitability verdict
 
-**UNPROVEN — insufficient data and no event-driven backtest engine.**
-
-The previously reported OOS expectancy of ~₹+6 with a confidence interval crossing zero was produced by the old BacktestService with a caller-supplied synthetic trade array. It has no connection to actual scanner logic or historical options prices and cannot be used to establish profitability.
+**UNPROVEN — historical options data has not been fetched.** The event-driven replay engine (`POST /backtest/replay`) is now fully built and wired. The backfill endpoint (`POST /backtest/rolling-backfill`) is correctly implemented. The only remaining blocker is the Dhan account access tier: a historical data subscription (separate from the standard API key) is required to fetch rolling option candles. Once that subscription is active and the backfill is run, the replay engine can produce a statistically valid OOS profitability verdict.
 
 This verdict must not change until:
 1. At least 6 months of underlying OHLCV and rolling option candles are fetched.
