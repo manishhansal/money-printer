@@ -56,8 +56,14 @@ import {
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Maximum calendar days per Dhan rolling option request (documented limit). */
-const CHUNK_DAYS = 30;
+/** Maximum calendar days per Dhan rolling option request.
+ *
+ * Dhan's rolling option API constrains the date range to at most 1 calendar
+ * day (toDate − fromDate ≤ 1). Requests spanning 2+ days return DH-905.
+ * With CHUNK_DAYS=1, each call covers fromDate and fromDate+1 (inclusive),
+ * which is the documented maximum supported by the API.
+ */
+const CHUNK_DAYS = 1;
 
 /** Milliseconds to wait between successive API chunks. */
 const INTER_CHUNK_DELAY_MS = 500;
@@ -332,8 +338,11 @@ export class DhanRollingOptionBackfillService {
   }): Promise<ChunkResult> {
     const ce = params.optionType === 'CALL' ? 'CE' : 'PE';
 
-    // Dhan toDate is non-inclusive; add 1 day to include the user's toDate.
-    const apiToDate = this.addDays(params.toDate, 1);
+    // Dhan toDate is INCLUSIVE — do NOT add 1 day.
+    // The original +1 comment was incorrect; sending expiryDate+1 causes
+    // DH-905 (Input_Exception) because the rolling option API rejects
+    // toDate values at or after the weekly expiry date (Thursdays).
+    const apiToDate = params.toDate;
 
     const apiRequest: DhanRollingOptionRequest = {
       exchangeSegment: params.exchangeSegment as DhanRollingOptionRequest['exchangeSegment'],
@@ -598,10 +607,18 @@ export class DhanRollingOptionBackfillService {
     return gaps;
   }
 
-  /** Add N calendar days to a YYYY-MM-DD string. */
+  /** Add N calendar days to a YYYY-MM-DD string, skipping Sunday (day 0).
+   *
+   * Dhan's rolling option API rejects dates that fall on Sunday with DH-905.
+   * When the computed date would be a Sunday, advance to the following Monday.
+   */
   private addDays(dateStr: string, days: number): string {
     const d = new Date(`${dateStr}T00:00:00Z`);
     d.setUTCDate(d.getUTCDate() + days);
+    // Advance past Sunday — Dhan rejects Sunday as a toDate (DH-905)
+    if (d.getUTCDay() === 0) {
+      d.setUTCDate(d.getUTCDate() + 1);
+    }
     return this.formatDate(d);
   }
 

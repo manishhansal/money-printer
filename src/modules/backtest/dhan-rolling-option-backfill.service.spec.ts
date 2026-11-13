@@ -334,11 +334,12 @@ describe('DhanRollingOptionBackfillService', () => {
       expect(result.chunks[0].error).toBe('API unavailable');
     });
 
-    it('respects the 30-day chunk limit per API call', async () => {
+    it('respects the 1-day chunk limit per API call', async () => {
       api.getRollingOptionData = jest.fn().mockResolvedValue({
         data: { ce: null, pe: null },
       });
 
+      // Use a 3-day range — with CHUNK_DAYS=1 this produces exactly 3 chunks
       await svc.backfill({
         securityId: '13',
         underlyingSymbol: 'NIFTY',
@@ -349,20 +350,20 @@ describe('DhanRollingOptionBackfillService', () => {
         optionTypes: ['CALL'],
         interval: '5',
         fromDate: '2024-01-01',
-        toDate: '2024-03-31', // 90 days → at least 3 chunks
+        toDate: '2024-01-03', // 3 days → exactly 3 chunks of 1 day each
       });
 
-      // Should have been called at least 3 times for ATM CALL over 90 days
+      // Should have been called exactly 3 times (one per day)
       const callCount = (api.getRollingOptionData as jest.Mock).mock.calls.length;
-      expect(callCount).toBeGreaterThanOrEqual(3);
+      expect(callCount).toBe(3);
 
-      // Verify no single request spans more than 30 days
+      // Verify no single request spans more than 1 calendar day
       for (const call of (api.getRollingOptionData as jest.Mock).mock.calls) {
         const req = call[0] as { fromDate: string; toDate: string };
         const from = new Date(`${req.fromDate}T00:00:00Z`);
         const to = new Date(`${req.toDate}T00:00:00Z`);
         const diff = (to.getTime() - from.getTime()) / 86400_000;
-        expect(diff).toBeLessThanOrEqual(31); // 30-day inclusive + 1 for non-inclusive API
+        expect(diff).toBeLessThanOrEqual(1); // Dhan API max: 1 calendar day span
       }
     });
   });

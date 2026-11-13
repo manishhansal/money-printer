@@ -943,7 +943,12 @@ export class DhanApiClient implements OnModuleDestroy {
   async getRollingOptionData(
     request: DhanRollingOptionRequest,
   ): Promise<DhanRollingOptionResponse> {
-    return this.request<DhanRollingOptionResponse>('POST', '/v2/charts/rollingoption', request);
+    return this.request<DhanRollingOptionResponse>(
+      'POST',
+      '/v2/charts/rollingoption',
+      request,
+      true, // client-id required (same as getLtp/getOhlcSnapshot)
+    );
   }
 }
 
