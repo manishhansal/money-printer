@@ -163,7 +163,21 @@ export class AutoRemediationService {
     }
 
     this.logger.warn(`Human-approved remediation for issue ${issueId} (${issue.issueKey})`);
-    return this.executePlan(issue, { type: 'ALERT_AND_LOG' });
+    const result = await this.executePlan(issue, { type: 'ALERT_AND_LOG' });
+
+    // executePlan sets FIX_IN_PROGRESS in DB but returns without persisting
+    // the final status. The caller is responsible for the RESOLVED transition.
+    if (result.success) {
+      issue.status = 'RESOLVED';
+      issue.resolutionTimestamp = new Date();
+      issue.resolutionEvidence = result.evidence;
+      await this.issuesRepo.save(issue);
+    } else {
+      issue.status = result.newStatus as MonitoringIssues['status'];
+      await this.issuesRepo.save(issue);
+    }
+
+    return result;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
