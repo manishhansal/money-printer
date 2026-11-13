@@ -223,9 +223,10 @@ export class MarketRegimeService implements OnModuleInit {
     if (!this.isMarketHoursNow()) return;
 
     try {
-      const resp = await this.dhanApiClient.getLtp({ IDX_I: [13, 25] });
+      const resp = await this.dhanApiClient.getLtp({ IDX_I: [13, 25, 36] });
       const niftyLtp = resp?.data?.IDX_I?.['13']?.last_price;
       const bnLtp = resp?.data?.IDX_I?.['25']?.last_price;
+      const vixLtp = resp?.data?.IDX_I?.['36']?.last_price;
 
       if (niftyLtp && niftyLtp > 0) {
         // Use volume='800000' as a neutral proxy (0.8 relative volume = average market)
@@ -247,6 +248,15 @@ export class MarketRegimeService implements OnModuleInit {
         await this.redisService.set('mkt:snapshot:25', snap, INDEX_LTP_TTL_SECONDS);
         this.logger.debug(
           `pollIndexLtp: BANKNIFTY LTP=${bnLtp} written (TTL ${INDEX_LTP_TTL_SECONDS}s)`,
+        );
+      }
+
+      // India VIX (secId=36) — used for HIGH_VOL regime override (threshold: 20).
+      if (vixLtp && vixLtp > 0) {
+        const snap = JSON.stringify({ ltp: String(vixLtp), volume: '0', timestamp: Date.now() });
+        await this.redisService.set('mkt:snapshot:36', snap, INDEX_LTP_TTL_SECONDS);
+        this.logger.debug(
+          `pollIndexLtp: India VIX=${vixLtp} written (TTL ${INDEX_LTP_TTL_SECONDS}s)`,
         );
       }
     } catch (err) {
@@ -507,13 +517,24 @@ export class MarketRegimeService implements OnModuleInit {
       // ATR proxy: 0.5% of NIFTY LTP
       const atr = niftyLtp * 0.005;
 
+      // India VIX — read from REST-polled mkt:snapshot:36 (secId=36, IDX_I).
+      // Falls back to 15 if the key is absent or the value is invalid.
+      const vixRaw = await this.redisService.get('mkt:snapshot:36');
+      const indiaVix = vixRaw
+        ? Math.max(1, parseFloat((JSON.parse(vixRaw) as { ltp: string }).ltp) || 15)
+        : 15;
+
+      // Real advance/decline breadth from the live subscription universe.
+      const { breadth: marketBreadth, adRatio: advanceDeclineRatio } =
+        await this.computeMarketBreadth(niftyTrend);
+
       return {
         niftyTrend,
         bankniftyTrend,
-        marketBreadth: niftyTrend === 'BULLISH' ? 60 : niftyTrend === 'BEARISH' ? 40 : 50,
-        advanceDeclineRatio: niftyTrend === 'BULLISH' ? 1.5 : niftyTrend === 'BEARISH' ? 0.7 : 1.0,
+        marketBreadth,
+        advanceDeclineRatio,
         vwapDeviation: niftyChangePct,
-        indiaVix: 15, // conservative default — no VIX feed yet
+        indiaVix,
         atr,
         relativeVolume,
         sectorStrength: null,
@@ -527,6 +548,82 @@ export class MarketRegimeService implements OnModuleInit {
   // ─────────────────────────────────────────────────────────────────────────
   // Private helpers — index LTP polling, options-based fallback, market hours
   // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Compute real advance/decline market breadth from the live subscription feed.
+   *
+   * Scans all instruments currently reporting a live snapshot (`mkt:snapshot:*`)
+   * and compares each LTP against its day-open price (`mkt:dayopen:*`).
+   * Instruments advancing (LTP > day-open) are counted separately from those
+   * declining (LTP < day-open).
+   *
+   * Returns:
+   *   breadth  — advancing% of total (0–100); proxy for NSE-wide breadth.
+   *   adRatio  — advance/decline ratio (advancing ÷ declining).
+   *
+   * Falls back to trend-derived defaults when fewer than MIN_BREADTH_INSTRUMENTS
+   * instruments have both keys present (e.g. pre-market or thin feed).
+   *
+   * Fix for: GAP-002 — market breadth was a hardcoded ternary on niftyTrend.
+   */
+  private async computeMarketBreadth(
+    fallbackTrend: TrendDirection,
+  ): Promise<{ breadth: number; adRatio: number }> {
+    const FALLBACK: Record<TrendDirection, { breadth: number; adRatio: number }> = {
+      BULLISH: { breadth: 60, adRatio: 1.5 },
+      BEARISH: { breadth: 40, adRatio: 0.7 },
+      SIDEWAYS: { breadth: 50, adRatio: 1.0 },
+    };
+    const MIN_INSTRUMENTS = 5;
+
+    try {
+      // Collect all security IDs with an active snapshot (excludes indices 13/25/36)
+      const snapshotKeys = await this.redisService.keys('mkt:snapshot:*');
+      const ids = snapshotKeys
+        .map((k) => k.replace('mkt:snapshot:', ''))
+        .filter((id) => !['13', '25', '36'].includes(id));
+
+      if (ids.length < MIN_INSTRUMENTS) return FALLBACK[fallbackTrend];
+
+      // Batch-fetch current LTPs and day-open prices in parallel
+      const pairs = await Promise.all(
+        ids.map(async (id) => {
+          const [snapRaw, dayopenStr] = await Promise.all([
+            this.redisService.get(`mkt:snapshot:${id}`),
+            this.redisService.get(`mkt:dayopen:${id}`),
+          ]);
+          return { snapRaw, dayopenStr };
+        }),
+      );
+
+      let advancing = 0;
+      let declining = 0;
+
+      for (const { snapRaw, dayopenStr } of pairs) {
+        if (!snapRaw || !dayopenStr) continue;
+        const ltp = parseFloat((JSON.parse(snapRaw) as { ltp: string }).ltp);
+        const dayOpen = parseFloat(dayopenStr);
+        if (!ltp || !dayOpen) continue;
+        if (ltp > dayOpen) advancing++;
+        else if (ltp < dayOpen) declining++;
+      }
+
+      const total = advancing + declining;
+      if (total < MIN_INSTRUMENTS) return FALLBACK[fallbackTrend];
+
+      const breadth = (advancing / total) * 100;
+      const adRatio = declining > 0 ? advancing / declining : advancing > 0 ? 3.0 : 1.0;
+
+      this.logger.debug(
+        `computeMarketBreadth: ${advancing} advancing / ${declining} declining` +
+          ` of ${total} instruments → breadth=${breadth.toFixed(1)}% A/D=${adRatio.toFixed(2)}`,
+      );
+
+      return { breadth, adRatio };
+    } catch {
+      return FALLBACK[fallbackTrend];
+    }
+  }
 
   /**
    * Load the nearest-expiry near-ATM NIFTY call/put pairs from the instruments

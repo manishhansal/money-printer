@@ -25,6 +25,9 @@ import { DhanHistoricalBackfillService } from './dhan-historical-backfill.servic
 import { DhanRollingOptionBackfillService } from './dhan-rolling-option-backfill.service';
 import { TradingChargesModule } from '../charges/trading-charges.module';
 import { DhanApiModule } from '../dhan/dhan-api.module';
+import { TechnicalAnalysisModule } from '../technical-analysis/technical-analysis.module';
+import { StrategyEntryConditionsService } from '../signal-scanner/strategy-entry-conditions.service';
+import { BacktestReplayService } from './backtest-replay.service';
 import { Trade } from '../../database/entities/trades.entity';
 import { PaperTrade } from '../../database/entities/paper-trades.entity';
 import { HistoricalCandles } from '../../database/entities/historical-candles.entity';
@@ -36,6 +39,8 @@ import { Instruments } from '../../database/entities/instruments.entity';
     TradingChargesModule,
     // DhanApiModule: provides DhanApiClient for both backfill services.
     DhanApiModule,
+    // TechnicalAnalysisModule: provides TechnicalAnalysisService for BacktestReplayService.
+    TechnicalAnalysisModule,
     TypeOrmModule.forFeature([
       Trade,
       PaperTrade,
@@ -45,7 +50,20 @@ import { Instruments } from '../../database/entities/instruments.entity';
     ]),
   ],
   controllers: [BacktestController],
-  providers: [BacktestService, DhanHistoricalBackfillService, DhanRollingOptionBackfillService],
-  exports: [BacktestService, DhanHistoricalBackfillService, DhanRollingOptionBackfillService],
+  providers: [
+    BacktestService,
+    DhanHistoricalBackfillService,
+    DhanRollingOptionBackfillService,
+    // StrategyEntryConditionsService has no module of its own — register directly.
+    StrategyEntryConditionsService,
+    // Event-driven replay engine (GAP-004 fix).
+    BacktestReplayService,
+  ],
+  exports: [
+    BacktestService,
+    DhanHistoricalBackfillService,
+    DhanRollingOptionBackfillService,
+    BacktestReplayService,
+  ],
 })
 export class BacktestModule {}

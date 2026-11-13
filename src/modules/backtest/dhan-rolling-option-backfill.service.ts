@@ -119,8 +119,8 @@ export interface RollingOptionBackfillRequest {
   instrument: 'OPTIDX' | 'OPTSTK';
   /** Expiry type: weekly or monthly. */
   expiryFlag: 'WEEK' | 'MONTH';
-  /** Expiry ordinal: 0 = current, 1 = next. Default: 0. */
-  expiryCode?: 0 | 1 | 2 | 3;
+  /** Expiry ordinal: 1 = current (nearest) expiry, 2 = next. Default: 1. */
+  expiryCode?: 1 | 2 | 3 | 4;
   /** Option type(s) to fetch. Default: both CALL and PUT. */
   optionTypes?: Array<'CALL' | 'PUT'>;
   /**
@@ -201,7 +201,7 @@ export class DhanRollingOptionBackfillService {
       exchangeSegment,
       instrument,
       expiryFlag,
-      expiryCode = 0,
+      expiryCode = 1,
       optionTypes = ['CALL', 'PUT'],
       interval = '5',
       overwrite = false,
@@ -322,7 +322,7 @@ export class DhanRollingOptionBackfillService {
     exchangeSegment: string;
     instrument: 'OPTIDX' | 'OPTSTK';
     expiryFlag: 'WEEK' | 'MONTH';
-    expiryCode: 0 | 1 | 2 | 3;
+    expiryCode: 1 | 2 | 3 | 4;
     strikeOffset: RollingStrikeOffset;
     optionType: 'CALL' | 'PUT';
     interval: '1' | '5' | '15' | '25' | '60';

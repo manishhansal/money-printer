@@ -663,9 +663,10 @@ export interface DhanRollingOptionRequest {
   expiryFlag: 'WEEK' | 'MONTH';
   /**
    * Expiry ordinal.
-   * 0 = current (nearest) expiry, 1 = next expiry, etc.
+   * 1 = current (nearest) expiry, 2 = next expiry, etc.
+   * Note: Dhan uses 1-indexed expiry codes — 0 is not a valid value.
    */
-  expiryCode: 0 | 1 | 2 | 3;
+  expiryCode: 1 | 2 | 3 | 4;
   /**
    * ATM-relative strike offset.
    * For OPTIDX: ATM-10 to ATM+10.
