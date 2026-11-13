@@ -92,7 +92,7 @@ function makeHealthyIndicators(ltp: number): IndicatorSnapshot {
     ema9: ltp * 0.998,
     ema21: ltp * 0.995,
     relVol: 1.2,
-    orb: { orbHigh: ltp * 1.01, orbLow: ltp * 0.99 },
+    orb: { orbHigh: ltp * 1.01, orbLow: ltp * 0.99, windowMinutes: 15 },
     candleCount: 50,
   };
 }
