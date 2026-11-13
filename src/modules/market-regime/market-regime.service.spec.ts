@@ -21,12 +21,13 @@
 
 import * as fc from 'fast-check';
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
+import { getDataSourceToken, getRepositoryToken } from '@nestjs/typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ConfigService } from '@nestjs/config';
 import { MarketRegimeService } from './market-regime.service';
 import { MarketRegimes } from '../../database/entities/market-regimes.entity';
 import { RedisService } from '../redis/redis.service';
+import { DhanApiClient } from '../dhan/dhan-api.client';
 import { MarketRegime, RegimeInputs, TrendDirection, VALID_REGIMES } from './market-regime.types';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -160,6 +161,18 @@ describe('MarketRegimeService', () => {
         {
           provide: EventEmitter2,
           useValue: eventEmitterMock,
+        },
+        {
+          provide: DhanApiClient,
+          useValue: {
+            getLtp: jest.fn().mockResolvedValue({ data: {} }),
+          },
+        },
+        {
+          provide: getDataSourceToken(),
+          useValue: {
+            query: jest.fn().mockResolvedValue([]),
+          },
         },
       ],
     }).compile();
