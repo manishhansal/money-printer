@@ -10,7 +10,7 @@
  * Requirements: Phase 9 — Quantitative Validation; Section 10 (walk-forward testing)
  */
 
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Logger, Post, Query } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MoreThanOrEqual, Repository } from 'typeorm';
 import { BacktestService } from './backtest.service';
@@ -58,6 +58,8 @@ export interface ChargeRatesResponse {
 
 @Controller('backtest')
 export class BacktestController {
+  private readonly logger = new Logger(BacktestController.name);
+
   constructor(
     private readonly backtestService: BacktestService,
     private readonly backfillService: DhanHistoricalBackfillService,
@@ -286,6 +288,11 @@ export class BacktestController {
    */
   @Post('replay')
   async runReplay(@Body() req: ReplayBacktestRequest): Promise<ReplayBacktestResult> {
-    return this.replayService.runReplay(req);
+    try {
+      return await this.replayService.runReplay(req);
+    } catch (err) {
+      const e = err as Error;
+      throw new Error(`Replay failed: ${e.message}\n${e.stack?.slice(0, 500) ?? ''}`);
+    }
   }
 }
