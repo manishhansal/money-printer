@@ -25,6 +25,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import fc from 'fast-check';
 
 import { RiskEvents } from '../../database/entities/risk-events.entity';
@@ -92,6 +93,12 @@ async function buildService(opts: {
       {
         provide: ConfigService,
         useValue: buildMockConfigService(opts.dailyLossLimit),
+      },
+      // EventEmitter2 is required by DailyLossStateMachineService to broadcast
+      // risk.state.changed events to LiveTradingService.
+      {
+        provide: EventEmitter2,
+        useValue: { emit: jest.fn() },
       },
     ],
   }).compile();

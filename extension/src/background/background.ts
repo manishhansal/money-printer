@@ -240,7 +240,12 @@ chrome.runtime.onMessage.addListener(
     }
 
     if (message.type === 'REQUEST_ARM') {
-      // Step 1 of two-step arm: DISARMED → ARMED_PENDING
+      // Step 1 of two-step arm: DISARMED → ARMED_PENDING.
+      // Guard: only allowed from DISARMED to prevent double-activation.
+      if (currentState.armedState !== 'DISARMED') {
+        sendResponse({ ...currentState, error: `REQUEST_ARM requires DISARMED state; current: ${currentState.armedState}` });
+        return true;
+      }
       updateState({ armedState: 'ARMED_PENDING' })
         .then(() => sendResponse({ ...currentState }))
         .catch(() => sendResponse({ ...currentState }));
@@ -248,7 +253,12 @@ chrome.runtime.onMessage.addListener(
     }
 
     if (message.type === 'CONFIRM_ARM') {
-      // Step 2: ARMED_PENDING → ARMED
+      // Step 2: ARMED_PENDING → ARMED.
+      // Guard: only allowed from ARMED_PENDING — prevents DISARMED → ARMED bypass.
+      if (currentState.armedState !== 'ARMED_PENDING') {
+        sendResponse({ ...currentState, error: `CONFIRM_ARM requires ARMED_PENDING state; current: ${currentState.armedState}` });
+        return true;
+      }
       updateState({ armedState: 'ARMED' })
         .then(() => sendResponse({ ...currentState }))
         .catch(() => sendResponse({ ...currentState }));

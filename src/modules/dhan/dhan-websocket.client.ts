@@ -648,6 +648,12 @@ export class DhanWebSocketClient implements OnModuleDestroy {
 
     clearTimeout(this.reconnectTimer);
     this.reconnectTimer = setTimeout(() => {
+      // Guard: if disconnect() was called while the timer was pending, the
+      // explicitDisconnect flag will be set — do not overwrite state or reconnect.
+      if (this.explicitDisconnect || this.state === 'DISCONNECTING') {
+        this.logger.log('Reconnect timer fired but explicit disconnect is in progress — aborting');
+        return;
+      }
       this.state = 'CONNECTING';
       void this.attemptConnection();
     }, delayMs);

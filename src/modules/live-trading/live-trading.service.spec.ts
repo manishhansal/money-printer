@@ -217,7 +217,9 @@ describe('LiveTradingService', () => {
       });
 
       service.onRiskStateChanged({
+        engine: 'LIVE',
         state: 'TWO_LOSS_LOCKOUT',
+        previousState: 'NORMAL',
         reason: 'Second losing trade closed',
         occurredAt: new Date(),
       });
@@ -233,7 +235,9 @@ describe('LiveTradingService', () => {
       });
 
       service.onRiskStateChanged({
+        engine: 'LIVE',
         state: 'EMERGENCY_HALT',
+        previousState: 'NORMAL',
         reason: 'Daily loss limit breached',
         occurredAt: new Date(),
       });
@@ -265,14 +269,18 @@ describe('LiveTradingService', () => {
       });
 
       service.onRiskStateChanged({
+        engine: 'LIVE',
         state: 'TWO_LOSS_LOCKOUT',
+        previousState: 'NORMAL',
         reason: 'Second losing trade',
         occurredAt: new Date(),
       });
       expect(service.isNewEntryBlocked()).toBe(true);
 
       service.onRiskStateChanged({
+        engine: 'LIVE',
         state: 'NORMAL',
+        previousState: 'TWO_LOSS_LOCKOUT',
         reason: 'Next trading day reset',
         occurredAt: new Date(),
       });

@@ -22,7 +22,7 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, Not, LessThan } from 'typeorm';
 import { Cron } from '@nestjs/schedule';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { v4 as uuidv4 } from 'uuid';
@@ -114,16 +114,28 @@ export class OrderStatusPollerService {
         const tradedQty = dhanOrder.filledQty ?? localOrder.quantity;
         const tradedPrice = String(dhanOrder.averageTradedPrice ?? 0);
 
+        // Atomic guard: only write if not already complete — eliminates the
+        // TOCTOU race with DhanOrderUpdateClient (both detect fills independently).
+        const updateResult = await this.ordersRepo.update(
+          { id: localOrder.id, status: Not('complete') },
+          {
+            status: 'complete' as Order['status'],
+            filled_quantity: tradedQty,
+            average_fill_price: tradedPrice,
+          },
+        );
+
+        if (!updateResult.affected || updateResult.affected === 0) {
+          this.logger.debug(
+            `[OrderPoller] Fill for order ${localOrder.id} already processed — skipping duplicate`,
+          );
+          continue;
+        }
+
         this.logger.log(
           `[OrderPoller] FILLED: orderId=${localOrder.id}, ` +
             `dhanOrderId=${dhanOrder.orderId}, qty=${tradedQty}@${tradedPrice}`,
         );
-
-        // Update DB order.
-        localOrder.status = 'complete';
-        localOrder.filled_quantity = tradedQty;
-        localOrder.average_fill_price = tradedPrice;
-        await this.ordersRepo.save(localOrder);
 
         // Emit fill event for position management.
         this.eventEmitter.emit(ORDER_FILL_DETECTED_EVENT, {
@@ -140,15 +152,26 @@ export class OrderStatusPollerService {
       // ── PARTIALLY_FILLED ─────────────────────────────────────────────────────
       else if (dhanStatus === 'PARTIALLY_FILLED') {
         const tradedQty = dhanOrder.filledQty ?? 0;
-        if (tradedQty > localOrder.filled_quantity) {
+        if (tradedQty > 0) {
           const tradedPrice = String(dhanOrder.averageTradedPrice ?? 0);
-          const newFill = tradedQty - localOrder.filled_quantity;
+          const prevFilled = localOrder.filled_quantity; // snapshot before atomic update
 
-          localOrder.status = 'partial';
-          localOrder.filled_quantity = tradedQty;
-          localOrder.average_fill_price = tradedPrice;
-          await this.ordersRepo.save(localOrder);
+          // Atomic guard: only write if our tradedQty is strictly greater than the
+          // current DB value — eliminates duplicate partial-fill events.
+          const updateResult = await this.ordersRepo.update(
+            { id: localOrder.id, filled_quantity: LessThan(tradedQty) },
+            {
+              status: 'partial' as Order['status'],
+              filled_quantity: tradedQty,
+              average_fill_price: tradedPrice,
+            },
+          );
 
+          if (!updateResult.affected || updateResult.affected === 0) {
+            continue; // stale or already processed
+          }
+
+          const newFill = tradedQty - prevFilled;
           this.eventEmitter.emit(ORDER_FILL_DETECTED_EVENT, {
             orderId: localOrder.id,
             dhanOrderId: dhanOrder.orderId,

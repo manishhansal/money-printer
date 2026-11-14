@@ -2,11 +2,14 @@
  * RiskManagement module shared types.
  *
  * Exports:
- *   - RiskGateName:    string-literal union for every pre-entry gate.
- *   - GateResult:      discriminated union returned by evaluatePreEntryGates.
- *   - PreEntryGateInput: all inputs required to evaluate all 8 gates.
+ *   - RiskGateName:         string-literal union for every pre-entry gate.
+ *   - GateResult:           discriminated union returned by evaluatePreEntryGates.
+ *   - PreEntryGateInput:    all inputs required to evaluate all 8 gates.
+ *   - RiskState:            all valid states emitted by DailyLossStateMachineService.
+ *   - RiskStateChangedEvent: payload published on every risk-state transition.
+ *   - RISK_STATE_CHANGED_EVENT: NestJS event name for the transition event.
  *
- * Requirements: 9.2, 9.5, 9.9, 9.11
+ * Requirements: 9.2, 9.3, 9.4, 9.5, 9.8, 9.9, 9.11
  */
 
 import { EngineType } from '../../database/entities/capital-ledgers.entity';
@@ -140,4 +143,42 @@ export interface PreEntryGateInput {
    * Optional for backward compatibility with callers that do not need persistence.
    */
   engine?: EngineType;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Risk state event (emitted by DailyLossStateMachineService)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * All valid states emitted by DailyLossStateMachineService via
+ * RISK_STATE_CHANGED_EVENT on every state transition (including resets
+ * back to NORMAL at midnight).
+ *
+ * Consumers (LiveTradingService, PaperTradingService) use this to gate
+ * new entry order submissions.
+ *
+ * Requirements: 9.3, 9.4, 9.8
+ */
+export type RiskState = 'NORMAL' | 'TWO_LOSS_LOCKOUT' | 'EMERGENCY_HALT' | 'KILL_SWITCH_ACTIVE';
+
+/** NestJS event name emitted by DailyLossStateMachineService on every state transition. */
+export const RISK_STATE_CHANGED_EVENT = 'risk.state.changed';
+
+/**
+ * Payload published on the `risk.state.changed` NestJS event for every
+ * state transition — including midnight resets back to NORMAL.
+ *
+ * Requirements: 9.3, 9.4, 9.8, 11.7
+ */
+export interface RiskStateChangedEvent {
+  /** Engine whose state changed ('LIVE' | 'PAPER'). */
+  engine: EngineType;
+  /** The state that was just entered. */
+  state: RiskState;
+  /** The state immediately before this transition. */
+  previousState: RiskState;
+  /** Human-readable explanation of why the transition occurred. */
+  reason: string;
+  /** Wall-clock UTC timestamp of the transition. */
+  occurredAt: Date;
 }

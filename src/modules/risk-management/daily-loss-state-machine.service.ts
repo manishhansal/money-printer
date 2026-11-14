@@ -32,12 +32,18 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { v4 as uuidv4 } from 'uuid';
 
 import { RiskEvents, RiskEventType } from '../../database/entities/risk-events.entity';
 import { EngineType } from '../../database/entities/capital-ledgers.entity';
 import { NotificationService } from '../notification/notification.service';
 import { AlertPriority, NotificationAlert } from '../notification/notification.types';
+import {
+  RISK_STATE_CHANGED_EVENT,
+  RiskState,
+  RiskStateChangedEvent,
+} from './risk-management.types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -96,6 +102,7 @@ export class DailyLossStateMachineService {
     private readonly riskEventsRepo: Repository<RiskEvents>,
     private readonly notificationService: NotificationService,
     private readonly configService: ConfigService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -246,6 +253,9 @@ export class DailyLossStateMachineService {
    * KILL_SWITCH_ACTIVE is intentionally excluded — it requires explicit manual
    * deactivation by an operator.
    *
+   * Emits `risk.state.changed` with state='NORMAL' so LiveTradingService
+   * re-opens new entry submissions for the new trading day.
+   *
    * Fires: 00:00 IST daily  (cron: '0 0 * * *', Asia/Kolkata)
    */
   @Cron('0 0 * * *', { timeZone: 'Asia/Kolkata' })
@@ -256,6 +266,16 @@ export class DailyLossStateMachineService {
       if (currentState === 'TWO_LOSS_LOCKOUT' || currentState === 'EMERGENCY_HALT') {
         this.state.set(engine, 'NORMAL');
         this.logger.log(`[${engine}] Daily state reset: ${currentState} → NORMAL at 00:00 IST`);
+
+        // Notify LiveTradingService that entries are permitted again for the new day.
+        const event: RiskStateChangedEvent = {
+          engine,
+          state: 'NORMAL',
+          previousState: currentState as RiskState,
+          reason: 'Daily state reset at 00:00 IST — new trading day begins.',
+          occurredAt: new Date(),
+        };
+        this.eventEmitter.emit(RISK_STATE_CHANGED_EVENT, event);
       }
 
       // Always reset the losing-trade counter and daily loss at midnight so the new day
@@ -290,9 +310,10 @@ export class DailyLossStateMachineService {
 
   /**
    * Core transition helper: updates in-memory state, persists a RiskEvents row,
-   * and publishes a notification alert.
+   * publishes a notification alert, and emits a `risk.state.changed` NestJS event
+   * so downstream consumers (LiveTradingService) can gate new entry submissions.
    *
-   * Failures in either persistence or notification delivery are logged at ERROR
+   * Failures in persistence or notification delivery are logged at ERROR
    * level but do not revert the in-memory state — the state machine never rolls
    * back a safety-critical transition due to a persistence failure.
    */
@@ -320,6 +341,18 @@ export class DailyLossStateMachineService {
 
     // 3. Publish notification.
     await this.publishNotification(engine, newState, previousState, opts.reason);
+
+    // 4. Emit NestJS event so LiveTradingService.onRiskStateChanged() blocks new entries.
+    //    Cast is safe: DailyLossState is a superset of RiskState; NORMAL is emitted
+    //    separately via resetDailyState().
+    const event: RiskStateChangedEvent = {
+      engine,
+      state: newState as RiskState,
+      previousState: previousState as RiskState,
+      reason: opts.reason,
+      occurredAt: new Date(),
+    };
+    this.eventEmitter.emit(RISK_STATE_CHANGED_EVENT, event);
   }
 
   /** Converts a DailyLossState to the matching RiskEventType column value. */

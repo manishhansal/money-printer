@@ -54,9 +54,16 @@ import {
 } from '../session-manager/session-manager.types';
 import { DhanOrderStatus } from '../dhan/dhan-api.types';
 import { ArmedState, ARMED_STATE_KEY } from './live-trading.types';
+import {
+  RISK_STATE_CHANGED_EVENT,
+  RiskState,
+  RiskStateChangedEvent,
+} from '../risk-management/risk-management.types';
 
 // Re-export for consumers that import from this module directly.
 export { ArmedState, ARMED_STATE_KEY } from './live-trading.types';
+// Re-export the risk-state types that were previously defined locally here.
+export { RISK_STATE_CHANGED_EVENT, RiskState, RiskStateChangedEvent };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -67,9 +74,6 @@ export { ArmedState, ARMED_STATE_KEY } from './live-trading.types';
  * Kept for backward compatibility.
  */
 export const TRADING_ARMED_STATE_KEY = ARMED_STATE_KEY;
-
-/** NestJS event name published by RiskEngine on TWO_LOSS_LOCKOUT / EMERGENCY_HALT. */
-export const RISK_STATE_CHANGED_EVENT = 'risk.state.changed';
 
 /**
  * How long to wait after submitting square-off orders before checking
@@ -82,16 +86,6 @@ export const SQUARE_OFF_CONFIRMATION_TIMEOUT_MS = 5 * 60 * 1_000; // 5 minutes
  * orders are cancelled and all positions are closed (Requirements 11.5, 11.6).
  */
 export const KILL_SWITCH_CONFIRMATION_TIMEOUT_MS = 10_000; // 10 seconds
-
-/** Risk state broadcast by RiskEngine when a daily-loss threshold is crossed. */
-export type RiskState = 'NORMAL' | 'TWO_LOSS_LOCKOUT' | 'EMERGENCY_HALT';
-
-/** Payload shape for `risk.state.changed` NestJS events emitted by RiskEngine. */
-export interface RiskStateChangedEvent {
-  state: RiskState;
-  reason: string;
-  occurredAt: Date;
-}
 
 /** Intermediate record tracking an order submitted during mandatory square-off. */
 interface PendingSquareOffOrder {
@@ -226,17 +220,21 @@ export class LiveTradingService implements OnModuleInit {
    * Returns true when new position entries must be blocked.
    *
    * Blocking conditions (Requirements 17.3, 11.7):
-   *   - Session phase is CLOSING (14:30–15:30 IST)
+   *   - Emergency kill switch has been activated (killSwitchActive)
+   *   - Session phase is CLOSING (15:00–15:30 IST)
    *   - Session phase is EOD_RECONCILIATION (15:30–16:00 IST)
    *   - RiskEngine has activated TWO_LOSS_LOCKOUT
    *   - RiskEngine has activated EMERGENCY_HALT
+   *   - RiskEngine has activated KILL_SWITCH_ACTIVE
    */
   isNewEntryBlocked(): boolean {
     return (
+      this.killSwitchActive ||
       this.currentPhase === SessionPhase.CLOSING ||
       this.currentPhase === SessionPhase.EOD_RECONCILIATION ||
       this.riskState === 'TWO_LOSS_LOCKOUT' ||
-      this.riskState === 'EMERGENCY_HALT'
+      this.riskState === 'EMERGENCY_HALT' ||
+      this.riskState === 'KILL_SWITCH_ACTIVE'
     );
   }
 
@@ -664,8 +662,9 @@ export class LiveTradingService implements OnModuleInit {
   /**
    * Risk state change handler.
    *
-   * TWO_LOSS_LOCKOUT and EMERGENCY_HALT both suppress new entry orders.
-   * Emitted by RiskManagementModule (task 16.2) via EventEmitter2.
+   * TWO_LOSS_LOCKOUT, EMERGENCY_HALT, and KILL_SWITCH_ACTIVE all suppress new
+   * entry orders via isNewEntryBlocked(). NORMAL re-opens entries.
+   * Emitted by DailyLossStateMachineService via EventEmitter2.
    *
    * Requirements: 11.7 — new entries must be blocked during lockout / halt.
    */
@@ -674,10 +673,15 @@ export class LiveTradingService implements OnModuleInit {
     const previous = this.riskState;
     this.riskState = event.state;
     this.logger.warn(
-      `Risk state changed: ${previous} → ${event.state}. ` +
+      `[${event.engine}] Risk state changed: ${previous} → ${event.state}. ` +
         `Reason: ${event.reason}. ` +
         `isNewEntryBlocked=${this.isNewEntryBlocked()}`,
     );
+
+    // Belt-and-suspenders: also force-disarm when risk engine activates kill switch.
+    if (event.state === 'KILL_SWITCH_ACTIVE') {
+      this.forceDisarm(`Risk engine kill switch activated (${event.engine}): ${event.reason}`);
+    }
   }
 
   /**
