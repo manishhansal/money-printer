@@ -32,7 +32,7 @@
  * Requirements: 2.7, 2.8, 20.8, 20.9
  */
 
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { OnEvent } from '@nestjs/event-emitter';
 import { InjectDataSource } from '@nestjs/typeorm';
@@ -97,7 +97,7 @@ export interface LatencyPercentiles {
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Injectable()
-export class SystemHealthMonitorService {
+export class SystemHealthMonitorService implements OnModuleInit {
   private readonly logger = new Logger(SystemHealthMonitorService.name);
 
   /**
@@ -128,6 +128,47 @@ export class SystemHealthMonitorService {
     for (const metric of LATENCY_METRICS) {
       this.latencyWindows.set(metric, []);
     }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Lifecycle
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Seeds all health metric keys and `health:dhan_last_checked_at` into Redis
+   * immediately at boot.
+   *
+   * Without this, `pollHealth()` only runs at the next 30-second cron boundary,
+   * leaving a window where the keys are absent. The watchdog's first check fires
+   * at ~15s and would find null keys — producing false "unknown" / "stale" state
+   * for `checkBackendHealth()` and `checkDhanConnectivity()`.
+   *
+   * Fix for: P1 infrastructure:backend_degraded (boot-time race)
+   *          P2 execution:dhan_health_check_stale (missing writer)
+   */
+  async onModuleInit(): Promise<void> {
+    this.logger.log('SystemHealthMonitorService: seeding initial health keys in Redis');
+
+    // Seed all 6 metric keys with their initial in-memory state (all 'Healthy').
+    await Promise.all(
+      ALL_METRICS.map((metric) =>
+        this.redisService
+          .set(`health:${metric}`, this.states.get(metric) as string, HEALTH_KEY_TTL_SECONDS)
+          .catch((err: Error) =>
+            this.logger.error(`Failed to seed Redis key health:${metric}: ${err.message}`),
+          ),
+      ),
+    );
+
+    // Seed dhan_last_checked_at so checkDhanConnectivity() doesn't immediately
+    // report Infinity-stale on first watchdog cycle.
+    await this.redisService
+      .set('health:dhan_last_checked_at', new Date().toISOString(), HEALTH_KEY_TTL_SECONDS)
+      .catch((err: Error) =>
+        this.logger.error(`Failed to seed health:dhan_last_checked_at: ${err.message}`),
+      );
+
+    this.logger.log('SystemHealthMonitorService: Redis health keys seeded');
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -168,6 +209,16 @@ export class SystemHealthMonitorService {
           ),
       ),
     );
+
+    // ── Step 2b: refresh dhan_last_checked_at timestamp ───────────────────
+    // checkDhanConnectivity() reads this key to detect staleness (threshold: 2 min).
+    // Without a writer the key was always null → ageMs = Infinity → permanently stale.
+    // Fix for: P2 execution:dhan_health_check_stale
+    await this.redisService
+      .set('health:dhan_last_checked_at', new Date().toISOString(), HEALTH_KEY_TTL_SECONDS)
+      .catch((err: Error) =>
+        this.logger.error(`Failed to refresh health:dhan_last_checked_at: ${err.message}`),
+      );
 
     // ── Step 3: transition detection & CRITICAL alerts ─────────────────────
     for (const metric of ALL_METRICS) {

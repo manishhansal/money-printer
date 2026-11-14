@@ -182,6 +182,101 @@ export class CandleQueryService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Multi-timeframe candle loading
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Load candles at all standard intraday timeframes for multi-timeframe
+   * momentum analysis. Returns a map keyed by granularity, each array
+   * in chronological order (oldest first).
+   *
+   * Granularities and limits:
+   *   '1m'  — entry timing (last 100 candles)
+   *   '5m'  — primary momentum confirmation (last 60 candles)
+   *   '15m' — trend and structure (last 40 candles)
+   *   '1d'  — broader trend context (last 30 candles)
+   *
+   * @param instrumentId  DB UUID of the underlying instrument.
+   */
+  async getMultiTimeframeCandles(
+    instrumentId: string,
+  ): Promise<Record<CandleGranularity, OHLCV[]>> {
+    const [m1, m5, m15, daily] = await Promise.all([
+      this.getRecentCandles(instrumentId, '1m', 100),
+      this.getRecentCandles(instrumentId, '5m', 60),
+      this.getRecentCandles(instrumentId, '15m', 40),
+      this.getRecentCandles(instrumentId, '1d', 30),
+    ]);
+    return { '1m': m1, '5m': m5, '15m': m15, '1d': daily };
+  }
+
+  /**
+   * Returns the previous trading day's 1-minute candles for computing
+   * previous-day high/low support/resistance levels.
+   *
+   * "Previous day" = most recent completed weekday before today (IST).
+   *
+   * @param instrumentId  DB UUID of the instrument.
+   */
+  async getPreviousDayCandles(instrumentId: string): Promise<OHLCV[]> {
+    const nowUtc = new Date();
+    const nowIstMs = nowUtc.getTime() + IST_OFFSET_MS;
+    const istDate = new Date(nowIstMs);
+
+    const todayMidnightUtcMs =
+      Date.UTC(istDate.getUTCFullYear(), istDate.getUTCMonth(), istDate.getUTCDate()) -
+      IST_OFFSET_MS;
+
+    // Walk back to previous weekday
+    const prevDay = new Date(todayMidnightUtcMs - 24 * 60 * 60 * 1000);
+    while (prevDay.getUTCDay() === 0 || prevDay.getUTCDay() === 6) {
+      prevDay.setUTCDate(prevDay.getUTCDate() - 1);
+    }
+    const nextDay = new Date(prevDay.getTime() + 24 * 60 * 60 * 1000);
+
+    try {
+      const rows = await this.candlesRepo.find({
+        where: {
+          instrumentId,
+          granularity: '1m' as CandleGranularity,
+          timestamp: MoreThanOrEqual(prevDay),
+        },
+        order: { timestamp: 'ASC' },
+        select: {
+          openPrice: true,
+          highPrice: true,
+          lowPrice: true,
+          closePrice: true,
+          volume: true,
+          timestamp: true,
+        },
+      });
+      return rows
+        .filter((r) => r.timestamp && r.timestamp.getTime() < nextDay.getTime())
+        .map(this.toOHLCV);
+    } catch (err) {
+      this.logger.debug(
+        `[CandleQuery] getPreviousDayCandles failed for ${instrumentId}: ${(err as Error).message}`,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Convenience wrapper: returns previous day's high and low as a single
+   * object, or null when no previous-day candles are available.
+   *
+   * @param instrumentId  DB UUID of the instrument.
+   */
+  async getPreviousDayHighLow(instrumentId: string): Promise<{ high: number; low: number } | null> {
+    const candles = await this.getPreviousDayCandles(instrumentId);
+    if (candles.length === 0) return null;
+    const high = Math.max(...candles.map((c) => c.high));
+    const low = Math.min(...candles.map((c) => c.low));
+    return { high, low };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Private helpers
   // ─────────────────────────────────────────────────────────────────────────
 

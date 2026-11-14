@@ -1,7 +1,149 @@
 # QUANTITATIVE PROFITABILITY AUDIT — MoneyPrinter
-**Audit Date:** 2026-11-12  
-**Auditor Role:** Institutional Quantitative Researcher / NSE Derivatives Specialist  
-**Commit SHA:** `5d9fd24bb8df5c6b5f0b23a7672420331b6c646e`
+**Last Updated:** 2026-11-13 (Phase 0/2/3 implementation — commit `f1cac30` baseline + new work)
+**Auditor Role:** Institutional Quantitative Researcher / NSE Derivatives Specialist
+**HEAD Commit:** `f1cac30` (feat/money-printer branch, also origin/main HEAD)
+
+---
+
+## CHANGE LOG
+
+| Date | Change | Commit |
+|---|---|---|
+| 2026-11-12 | Initial audit at commit 5d9fd24 (prior session) | 5d9fd24 |
+| 2026-11-13 | Phase 0 baseline reconciliation + Phase 2/3 implementation | f1cac30 + new work |
+| 2026-11-13 | Phase 5: watchdog P1/P2 fixes + regime UNSTABLE fix (REST LTP poll + options fallback) | uncommitted |
+
+---
+
+## EXECUTIVE SUMMARY
+
+**A statistically defensible positive net expectancy CANNOT YET be established for any strategy in MoneyPrinter.**
+
+This conclusion applies to the current implementation state. It is not a matter of insufficient testing time — it reflects two specific structural prerequisites that remain incomplete:
+
+1. **Historical expired-options data** — now has the infrastructure (`DhanRollingOptionBackfillService`, `/v2/charts/rollingoption` endpoint) but has NOT been executed against the Dhan API. No historical options candles exist in the database.
+2. **Event-driven backtest replay** — `BacktestService.runBacktest()` still accepts a caller-provided trade array. No pipeline that generates that array by replaying scanner logic against stored candles exists yet. This remains a Phase 5 deliverable.
+
+The following improvements were implemented in this session, which change the nature but not the verdict of this audit:
+
+- **Rolling options API endpoint integrated** (`DhanApiClient.getRollingOptionData()`, types, entity, backfill service)
+- **Underlying-first scanner implemented** (`UnderlyingMomentumScannerService`) — corrects ARCH-001
+- **Per-strategy entry conditions implemented** (`StrategyEntryConditionsService`) — genuinely fixes DEFECT-002
+- **ADX, ROC, EMA50, RelativeStrength added** to `TechnicalAnalysisService`
+- **Multi-timeframe candle loading added** to `CandleQueryService`
+- **Expiry management implemented** (`ExpiryManagementService`) — weekly vs monthly classification
+
+---
+
+## 1. DATA AVAILABILITY ASSESSMENT
+
+### 1.1 Required vs Available
+
+| Data Type | Required | Available | Change |
+|---|---|---|---|
+| Historical expired NSE options (rolling) | YES | **Infrastructure exists; data NOT fetched** | ✅ API + entity + backfill service added |
+| Historical options premium OHLCV | YES | **Same as above** | ✅ |
+| Historical bid/ask history | YES | **NO** (Dhan rolling API does not provide bid/ask history) | No change |
+| Historical OI per strike | YES | **Via rolling API** (`oi` field in requiredData) | ✅ |
+| Historical IV surfaces | YES | **Via rolling API** (`iv` field in requiredData) | ✅ |
+| Underlying (NIFTY etc.) OHLCV | YES | Framework exists via `HistoricalCandleIngestionService`; NOT seeded | No change |
+| NSE holiday calendar | YES | **Partially** — `ExpiryManagementService` uses live Dhan expiry list | ✅ |
+| Expiry-specific contract specs | YES | **Via `ExpiryManagementService`** | ✅ |
+| Greeks (Delta, Gamma, Theta, Vega) | DESIRABLE | **NO** (Dhan rolling API does not provide Greeks) | No change |
+| Multi-timeframe candles (5m, 15m, 1d) | YES | **Framework exists**; data depends on backfill | ✅ |
+
+### 1.2 Data Coverage Score
+
+**0% — No historical options data has been fetched from Dhan API.**
+
+The infrastructure to fetch it now exists (`DhanRollingOptionBackfillService`). To acquire data, the operator must:
+
+```bash
+POST /backtest/rolling-backfill
+{
+  "securityId": "13",
+  "underlyingSymbol": "NIFTY",
+  "exchangeSegment": "NSE_FNO",
+  "instrument": "OPTIDX",
+  "expiryFlag": "WEEK",
+  "strikeOffsets": ["ATM-5","ATM-4","ATM-3","ATM-2","ATM-1","ATM","ATM+1","ATM+2","ATM+3","ATM+4","ATM+5"],
+  "interval": "5",
+  "fromDate": "2022-01-01",
+  "toDate": "2024-12-31"
+}
+```
+
+This endpoint does not yet exist in `BacktestController` — it must be wired. The backfill service is complete; only the HTTP endpoint wrapper is missing.
+
+---
+
+## 2. SIGNAL GENERATION ASSESSMENT
+
+### 2.1 Strategy Entry Logic — REVISED STATUS
+
+| Strategy | Required Entry Logic | Previously | Now |
+|---|---|---|---|
+| A — Opening Range Breakout | ORB range calculation, breakout detection | ❌ All identical RSI logic | ✅ Distinct: `evaluateORB()` |
+| B — VWAP Reclaim and Rejection | VWAP level, reclaim confirmation | ❌ | ✅ Distinct: `evaluateVWAPReclaim()` |
+| C — Momentum Expansion | Momentum measurement, expansion filter | ❌ | ✅ Distinct: `evaluateMomentumExpansion()` |
+| D — Breakout and Retest | Level identification, retest confirmation | ❌ | ✅ Distinct: `evaluateBreakoutRetest()` |
+| E — Relative Strength / Weakness | Stock vs NIFTY relative return | ❌ | ✅ Distinct: `evaluateRelativeStrength()` |
+| F — Trend Continuation | Trend direction, pullback entry | ❌ | ✅ Distinct: `evaluateTrendContinuation()` |
+
+**DEFECT-002 is now GENUINELY FIXED** in the new `StrategyEntryConditionsService`. The existing `SignalScannerService` still uses the old identical RSI logic; it should be superseded by `UnderlyingMomentumScannerService`.
+
+### 2.2 Scanner Architecture — REVISED
+
+| Aspect | Old (SignalScannerService) | New (UnderlyingMomentumScannerService) |
+|---|---|---|
+| Evaluation order | Option premium first | **Underlying first ✅** |
+| Indicators computed on | Option premium RSI | **Underlying OHLCV ✅** |
+| Timeframes | 1m only | **1m + 5m + 15m + 1d ✅** |
+| Strategy logic | All identical (RSI ≥ 55) | **Per-strategy distinct conditions ✅** |
+| Relative strength | Not implemented | **Stock vs NIFTY ✅** |
+| Expiry validation | None | **Weekly/monthly per ExpiryManagementService ✅** |
+| ADX / ROC | Not available | **Now implemented ✅** |
+
+### 2.3 Remaining Gaps
+
+| Gap | Severity | Status |
+|---|---|---|
+| India VIX hardcoded to 15 (HIGH_VOL never fires) | P1 | OPEN — no live VIX feed |
+| Market breadth is a proxy (not real advance/decline data) | P1 | OPEN |
+| `events:tick:{instrumentId}` channel not published from anywhere | P1 | OPEN |
+| Instrument universe uses static DB rows (no dynamic Dhan master CSV) | P1 | OPEN |
+| BacktestService has no event-driven replay | P0 | OPEN — Phase 5 |
+| No historical options data fetched | P0 | OPEN — requires Dhan historical data subscription (DH-901); code complete |
+| ~~Regime permanently UNSTABLE — scanner skips all instruments~~ | ~~P1~~ | **FIXED** — REST LTP poll + options put-call parity fallback; regime classifies as SIDEWAYS/WEAK_BULL/etc. |
+| ~~India VIX hardcoded to 15~~ | ~~P1~~ | **FIXED** — `pollIndexLtp()` fetches secId=36; real VIX read from `mkt:snapshot:36` |
+| ~~Market breadth is a hardcoded ternary proxy~~ | ~~P2~~ | **FIXED** — `computeMarketBreadth()` from live snapshot/dayopen keys |
+| IDX_I WebSocket feed returns no NIFTY/BANKNIFTY ticks | P1 | ROOT CAUSE IDENTIFIED — mitigated by REST polling |
+
+---
+
+## 3. BACKTEST READINESS
+
+### 3.1 Prerequisites checklist
+
+| Prerequisite | Status |
+|---|---|
+| Rolling options API types | ✅ |
+| Rolling options DB entity | ✅ |
+| Rolling options backfill service | ✅ |
+| Rolling options backfill HTTP endpoint | ✅ **`POST /backtest/rolling-backfill` wired** (account subscription required for data) |
+| Underlying OHLCV historical data | ❌ Not fetched |
+| Event-driven scanner replay | ✅ **`POST /backtest/replay` wired** to `BacktestReplayService.runReplay()` |
+| Walk-forward OOS splitter | ✅ Built into `BacktestReplayService` (IS/OOS split + 3 walk-forward windows) |
+
+### 3.2 Profitability verdict
+
+**UNPROVEN — historical options data has not been fetched.** The event-driven replay engine (`POST /backtest/replay`) is now fully built and wired. The backfill endpoint (`POST /backtest/rolling-backfill`) is correctly implemented. The only remaining blocker is the Dhan account access tier: a historical data subscription (separate from the standard API key) is required to fetch rolling option candles. Once that subscription is active and the backfill is run, the replay engine can produce a statistically valid OOS profitability verdict.
+
+This verdict must not change until:
+1. At least 6 months of underlying OHLCV and rolling option candles are fetched.
+2. An event-driven replay engine runs the production scanner logic against those candles.
+3. A properly isolated OOS period produces positive expectancy with a CI lower bound above zero.
+
 
 ---
 

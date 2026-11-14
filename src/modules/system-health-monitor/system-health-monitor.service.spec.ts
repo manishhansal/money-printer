@@ -210,8 +210,8 @@ describe('SystemHealthMonitorService', () => {
   it('should set a Redis key with TTL 90 s for all 6 metrics on every poll', async () => {
     await service.pollHealth();
 
-    // 6 Redis.set calls expected — one per metric
-    expect(redisMock.set).toHaveBeenCalledTimes(6);
+    // 7 Redis.set calls: one per metric + health:dhan_last_checked_at timestamp
+    expect(redisMock.set).toHaveBeenCalledTimes(7);
 
     for (const metric of ALL_METRICS) {
       expect(redisMock.set).toHaveBeenCalledWith(
@@ -220,6 +220,14 @@ describe('SystemHealthMonitorService', () => {
         HEALTH_KEY_TTL_SECONDS,
       );
     }
+
+    // The dhan_last_checked_at key must also be refreshed on every poll
+    // so that checkDhanConnectivity() never sees stale (Infinity-age) data.
+    expect(redisMock.set).toHaveBeenCalledWith(
+      'health:dhan_last_checked_at',
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/), // ISO timestamp
+      HEALTH_KEY_TTL_SECONDS,
+    );
   });
 
   // ── Test 7: poll publishes INFO summary ────────────────────────────────────

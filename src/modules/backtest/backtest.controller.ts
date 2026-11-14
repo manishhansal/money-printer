@@ -10,7 +10,7 @@
  * Requirements: Phase 9 — Quantitative Validation; Section 10 (walk-forward testing)
  */
 
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Logger, Post, Query } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MoreThanOrEqual, Repository } from 'typeorm';
 import { BacktestService } from './backtest.service';
@@ -19,6 +19,13 @@ import {
   BackfillRequest,
   BackfillResult,
 } from './dhan-historical-backfill.service';
+import {
+  DhanRollingOptionBackfillService,
+  RollingOptionBackfillRequest,
+  RollingOptionBackfillResult,
+} from './dhan-rolling-option-backfill.service';
+import { BacktestReplayService } from './backtest-replay.service';
+import { ReplayBacktestRequest, ReplayBacktestResult } from './backtest-replay.types';
 import { BacktestConfig, BacktestResult, BacktestTrade, AblationResult } from './backtest.types';
 import { TradingChargesService } from '../charges/trading-charges.service';
 import { Trade } from '../../database/entities/trades.entity';
@@ -51,9 +58,13 @@ export interface ChargeRatesResponse {
 
 @Controller('backtest')
 export class BacktestController {
+  private readonly logger = new Logger(BacktestController.name);
+
   constructor(
     private readonly backtestService: BacktestService,
     private readonly backfillService: DhanHistoricalBackfillService,
+    private readonly rollingBackfillService: DhanRollingOptionBackfillService,
+    private readonly replayService: BacktestReplayService,
     private readonly chargesService: TradingChargesService,
     @InjectRepository(Trade)
     private readonly tradesRepo: Repository<Trade>,
@@ -217,5 +228,71 @@ export class BacktestController {
   @Post('backfill')
   async backfill(@Body() request: BackfillRequest): Promise<BackfillResult> {
     return this.backfillService.backfill(request);
+  }
+
+  /**
+   * POST /backtest/rolling-backfill
+   *
+   * Fetch Dhan rolling-option historical candles (expired contract chains) and
+   * store them in the `rolling_option_candles` table.
+   *
+   * Resolves GAP-003: provides the historical options OHLCV data required by
+   * the event-driven replay engine (`POST /backtest/replay`).
+   *
+   * The backfill is chunked into ≤30-day windows, idempotent on re-run,
+   * and covers every strikeOffset × optionType combination in the range.
+   *
+   * @example
+   * POST /backtest/rolling-backfill
+   * {
+   *   "securityId": "13",
+   *   "underlyingSymbol": "NIFTY",
+   *   "exchangeSegment": "NSE_FNO",
+   *   "instrument": "OPTIDX",
+   *   "expiryFlag": "WEEK",
+   *   "interval": "5",
+   *   "fromDate": "2024-01-01",
+   *   "toDate": "2024-12-31"
+   * }
+   */
+  @Post('rolling-backfill')
+  async rollingBackfill(
+    @Body() request: RollingOptionBackfillRequest,
+  ): Promise<RollingOptionBackfillResult> {
+    return this.rollingBackfillService.backfill(request);
+  }
+
+  /**
+   * POST /backtest/replay
+   *
+   * Run a full event-driven replay backtest across all 6 strategies.
+   *
+   * Resolves GAP-004: unlike `POST /backtest/run` (which accepts a
+   * pre-computed trade array), this endpoint replays the actual production
+   * scanner logic candle-by-candle against historical data with no look-ahead.
+   *
+   * Requires rolling-option candle data in the DB — run
+   * `POST /backtest/rolling-backfill` first if the table is empty.
+   *
+   * All request fields are optional (defaults shown):
+   *   strategies       — ['A','B','C','D','E','F']
+   *   inSampleRatio    — 0.70  (70% IS, 30% OOS)
+   *   stopLossPct      — 0.15  (15% SL on option premium)
+   *   targetPct        — 0.25  (25% target on option premium)
+   *   walkForwardWindows — 3
+   *   maxDrawdownRupees  — 50000
+   *
+   * @example
+   * POST /backtest/replay
+   * { "strategies": ["A", "B"], "inSampleRatio": 0.75 }
+   */
+  @Post('replay')
+  async runReplay(@Body() req: ReplayBacktestRequest): Promise<ReplayBacktestResult> {
+    try {
+      return await this.replayService.runReplay(req);
+    } catch (err) {
+      const e = err as Error;
+      throw new Error(`Replay failed: ${e.message}\n${e.stack?.slice(0, 500) ?? ''}`);
+    }
   }
 }

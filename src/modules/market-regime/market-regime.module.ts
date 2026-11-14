@@ -29,6 +29,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { MarketRegimes } from '../../database/entities/market-regimes.entity';
 import { MarketRegimeService } from './market-regime.service';
+import { DhanApiModule } from '../dhan/dhan-api.module';
 
 @Module({
   imports: [
@@ -40,6 +41,11 @@ import { MarketRegimeService } from './market-regime.service';
 
     // Enables @OnEvent listeners and intra-process event broadcasting.
     EventEmitterModule.forRoot(),
+
+    // Provides DhanApiClient for the 30-second NIFTY/BANKNIFTY LTP REST poll
+    // that keeps mkt:snapshot:13 / mkt:snapshot:25 populated when the IDX_I
+    // WebSocket feed does not deliver index ticks.
+    DhanApiModule,
   ],
   providers: [MarketRegimeService],
   exports: [MarketRegimeService],

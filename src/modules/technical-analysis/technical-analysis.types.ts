@@ -51,8 +51,44 @@ export interface SupportResistanceResult {
 
 /** Result of an Opening Range Breakout (ORB) computation. */
 export interface ORBResult {
-  /** Highest price reached during the first 15-minute ORB window */
+  /** Highest price reached during the ORB window */
   orbHigh: number;
-  /** Lowest price reached during the first 15-minute ORB window */
+  /** Lowest price reached during the ORB window */
   orbLow: number;
+  /** Duration of the ORB window in minutes (5, 15, or 30). */
+  windowMinutes: number;
+}
+
+/**
+ * Result of an ADX / DMI computation.
+ *
+ * ADX measures trend strength (direction-independent).
+ * +DI measures upward directional movement.
+ * -DI measures downward directional movement.
+ *
+ * Interpretation:
+ *   - ADX > 25: strong trend (direction given by +DI vs -DI comparison).
+ *   - ADX < 20: weak/no trend (range-bound).
+ *   - +DI > -DI and ADX > 25: strong uptrend.
+ *   - -DI > +DI and ADX > 25: strong downtrend.
+ */
+export interface ADXResult {
+  /** Average Directional Index (0–100). Trend strength, direction-independent. */
+  adx: number;
+  /** Positive Directional Indicator (0–100). Upward movement strength. */
+  plusDI: number;
+  /** Negative Directional Indicator (0–100). Downward movement strength. */
+  minusDI: number;
+}
+
+/**
+ * Rate of Change result.
+ * Measures the percentage change in price over `period` candles.
+ * Positive = upward momentum; negative = downward momentum.
+ */
+export interface ROCResult {
+  /** Rate of change as a percentage. e.g. 1.5 means +1.5% over the period. */
+  roc: number;
+  /** Number of candles over which ROC was computed. */
+  period: number;
 }

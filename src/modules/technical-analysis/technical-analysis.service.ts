@@ -24,9 +24,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { MACDResult, OHLCV, ORBResult, SupportResistanceResult } from './technical-analysis.types';
 
-/** Duration of the Opening Range window in milliseconds (15 minutes). */
-const ORB_WINDOW_MS = 15 * 60 * 1_000;
-
 /** Standard MACD fast / slow / signal periods. */
 const MACD_FAST_PERIOD = 12;
 const MACD_SLOW_PERIOD = 26;
@@ -238,22 +235,23 @@ export class TechnicalAnalysisService {
   // ───────────────────────────────────────────────────────────────────────────
 
   /**
-   * Compute the Opening Range Breakout (ORB) high and low from the first
-   * 15-minute window of the trading session.
+   * Compute the Opening Range Breakout (ORB) high and low.
    *
-   * Any candle whose `timestamp` falls in the half-open interval
-   *   [sessionStart, sessionStart + 15 min)
+   * The ORB window is configurable: 5, 15, or 30 minutes.  Any candle whose
+   * `timestamp` falls in the half-open interval
+   *   [sessionStart, sessionStart + windowMinutes × 60_000)
    * is included in the ORB window.
    *
-   * @param candles      - Full intraday OHLCV candle array, oldest first.
-   * @param sessionStart - UTC timestamp of the session open (typically 09:15 IST).
-   * @returns `{ orbHigh, orbLow }`, or `null` when no candles fall in the ORB window.
+   * @param candles        - Full intraday OHLCV candle array, oldest first.
+   * @param sessionStart   - UTC timestamp of the session open (typically 09:15 IST).
+   * @param windowMinutes  - ORB window in minutes: 5 | 15 | 30. Default: 15.
+   * @returns `{ orbHigh, orbLow, windowMinutes }`, or `null` when no candles fall in the ORB window.
    *
    * Requirements: 5.2, 6.2
    */
-  computeORBRange(candles: OHLCV[], sessionStart: Date): ORBResult | null {
+  computeORBRange(candles: OHLCV[], sessionStart: Date, windowMinutes = 15): ORBResult | null {
     const startMs = sessionStart.getTime();
-    const endMs = startMs + ORB_WINDOW_MS;
+    const endMs = startMs + windowMinutes * 60_000;
 
     const orbCandles = candles.filter((c) => {
       const ts = c.timestamp.getTime();
@@ -262,7 +260,7 @@ export class TechnicalAnalysisService {
 
     if (orbCandles.length === 0) {
       this.logger.debug(
-        'computeORBRange: no candles within the 15-minute ORB window — returning null',
+        `computeORBRange: no candles within the ${windowMinutes}-minute ORB window — returning null`,
       );
       return null;
     }
@@ -270,7 +268,7 @@ export class TechnicalAnalysisService {
     const orbHigh = Math.max(...orbCandles.map((c) => c.high));
     const orbLow = Math.min(...orbCandles.map((c) => c.low));
 
-    return { orbHigh, orbLow };
+    return { orbHigh, orbLow, windowMinutes };
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -528,5 +526,135 @@ export class TechnicalAnalysisService {
     }
 
     return result;
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+  // 9. ADX — Average Directional Index (Wilder's DMI, default period 14)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Compute Wilder's ADX / DMI indicator.
+   *
+   * ADX measures trend strength (0–100, direction-independent).
+   * +DI > -DI → bullish directional pressure.
+   * -DI > +DI → bearish directional pressure.
+   * ADX > 25 and rising → confirmed trend; ADX < 20 → range-bound.
+   *
+   * Minimum candles required: 2 × period + 1.
+   *
+   * @param candles  Chronological OHLCV array (oldest first).
+   * @param period   Smoothing period. Default: 14.
+   */
+  computeADX(candles: OHLCV[], period = 14): import('./technical-analysis.types').ADXResult | null {
+    if (candles.length < 2 * period + 1) {
+      this.logger.debug(`computeADX: insufficient candles (${candles.length} < ${2 * period + 1})`);
+      return null;
+    }
+    const plusDMArr: number[] = [];
+    const minusDMArr: number[] = [];
+    const trArr: number[] = [];
+    for (let i = 1; i < candles.length; i++) {
+      const curr = candles[i];
+      const prev = candles[i - 1];
+      const tr = Math.max(
+        curr.high - curr.low,
+        Math.abs(curr.high - prev.close),
+        Math.abs(curr.low - prev.close),
+      );
+      trArr.push(tr);
+      const upMove = curr.high - prev.high;
+      const downMove = prev.low - curr.low;
+      plusDMArr.push(upMove > downMove && upMove > 0 ? upMove : 0);
+      minusDMArr.push(downMove > upMove && downMove > 0 ? downMove : 0);
+    }
+    let smTr = trArr.slice(0, period).reduce((a, b) => a + b, 0);
+    let smPlusDM = plusDMArr.slice(0, period).reduce((a, b) => a + b, 0);
+    let smMinusDM = minusDMArr.slice(0, period).reduce((a, b) => a + b, 0);
+    const dxArr: number[] = [];
+    for (let i = period; i < trArr.length; i++) {
+      smTr = smTr - smTr / period + trArr[i];
+      smPlusDM = smPlusDM - smPlusDM / period + plusDMArr[i];
+      smMinusDM = smMinusDM - smMinusDM / period + minusDMArr[i];
+      const pDI = smTr > 0 ? (smPlusDM / smTr) * 100 : 0;
+      const mDI = smTr > 0 ? (smMinusDM / smTr) * 100 : 0;
+      const diSum = pDI + mDI;
+      dxArr.push(diSum > 0 ? (Math.abs(pDI - mDI) / diSum) * 100 : 0);
+    }
+    if (dxArr.length < period) return null;
+    let adx = dxArr.slice(0, period).reduce((a, b) => a + b, 0) / period;
+    for (let i = period; i < dxArr.length; i++) {
+      adx = (adx * (period - 1) + dxArr[i]) / period;
+    }
+    const finalPlusDI = smTr > 0 ? (smPlusDM / smTr) * 100 : 0;
+    const finalMinusDI = smTr > 0 ? (smMinusDM / smTr) * 100 : 0;
+    return {
+      adx: Math.round(adx * 100) / 100,
+      plusDI: Math.round(finalPlusDI * 100) / 100,
+      minusDI: Math.round(finalMinusDI * 100) / 100,
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 10. Rate of Change (ROC)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Compute Rate of Change: ((close[now] - close[now-period]) / close[now-period]) * 100.
+   *
+   * @param candles  Chronological OHLCV array (oldest first).
+   * @param period   Look-back period. Default: 10.
+   */
+  computeROC(candles: OHLCV[], period = 10): import('./technical-analysis.types').ROCResult | null {
+    if (candles.length <= period) {
+      this.logger.debug(`computeROC: insufficient candles (${candles.length} <= ${period})`);
+      return null;
+    }
+    const current = candles[candles.length - 1].close;
+    const prior = candles[candles.length - 1 - period].close;
+    if (prior === 0) return null;
+    const roc = ((current - prior) / prior) * 100;
+    return { roc: Math.round(roc * 10000) / 10000, period };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 11. EMA50 convenience wrapper
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /** Returns the most recent EMA(50) or null when fewer than 50 candles exist. */
+  computeEMA50(candles: OHLCV[]): number | null {
+    return this.computeEMA(candles, 50);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 12. Relative strength of one instrument vs a benchmark
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Compute relative-return spread: stockReturn - benchmarkReturn (%).
+   * Positive = stock outperforming benchmark (bullish RS).
+   * Negative = stock underperforming benchmark (bearish RS).
+   *
+   * @param stockCandles      Chronological 1m candles for the stock.
+   * @param benchmarkCandles  Chronological 1m candles for the benchmark (NIFTY).
+   * @param lookbackCandles   Look-back candle count. Default: 15.
+   */
+  computeRelativeStrength(
+    stockCandles: OHLCV[],
+    benchmarkCandles: OHLCV[],
+    lookbackCandles = 15,
+  ): number | null {
+    if (
+      stockCandles.length < lookbackCandles + 1 ||
+      benchmarkCandles.length < lookbackCandles + 1
+    ) {
+      return null;
+    }
+    const stockNow = stockCandles[stockCandles.length - 1].close;
+    const stockPrior = stockCandles[stockCandles.length - 1 - lookbackCandles].close;
+    const benchNow = benchmarkCandles[benchmarkCandles.length - 1].close;
+    const benchPrior = benchmarkCandles[benchmarkCandles.length - 1 - lookbackCandles].close;
+    if (stockPrior === 0 || benchPrior === 0) return null;
+    const stockReturn = ((stockNow - stockPrior) / stockPrior) * 100;
+    const benchReturn = ((benchNow - benchPrior) / benchPrior) * 100;
+    return Math.round((stockReturn - benchReturn) * 10000) / 10000;
   }
 }

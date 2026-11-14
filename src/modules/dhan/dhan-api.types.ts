@@ -589,3 +589,161 @@ export interface DhanMarginCalculatorResponse {
  * failed, this endpoint recovers the Dhan order ID by correlationId.
  */
 export type DhanOrderByCorrelationIdResponse = DhanOrder;
+
+// ---------------------------------------------------------------------------
+// Rolling Option Historical Data (POST /v2/charts/rollingoption)
+// ---------------------------------------------------------------------------
+
+/**
+ * ATM-relative strike positions for rolling option data.
+ *
+ * Index options (OPTIDX): ATM-10 through ATM+10 (21 strikes).
+ * Stock options (OPTSTK): ATM-3 through ATM+3 (7 strikes).
+ *
+ * The API provides data relative to the ATM strike at each timestamp,
+ * so the actual absolute strike shifts as the underlying moves.
+ * The `strike` field in `requiredData` gives the actual strike per candle.
+ *
+ * DhanHQ v2 expired options API: https://dhanhq.co/docs/v2/expired-options-data/
+ */
+export type DhanRollingOptionStrike =
+  | 'ATM'
+  | 'ATM-1'
+  | 'ATM-2'
+  | 'ATM-3'
+  | 'ATM-4'
+  | 'ATM-5'
+  | 'ATM-6'
+  | 'ATM-7'
+  | 'ATM-8'
+  | 'ATM-9'
+  | 'ATM-10'
+  | 'ATM+1'
+  | 'ATM+2'
+  | 'ATM+3'
+  | 'ATM+4'
+  | 'ATM+5'
+  | 'ATM+6'
+  | 'ATM+7'
+  | 'ATM+8'
+  | 'ATM+9'
+  | 'ATM+10';
+
+/** Fields that can be requested from the rolling option endpoint. */
+export type DhanRollingOptionDataField =
+  'open' | 'high' | 'low' | 'close' | 'iv' | 'volume' | 'strike' | 'oi' | 'spot';
+
+/**
+ * Request body for POST /v2/charts/rollingoption.
+ *
+ * Returns up to 30 days per request of continuous rolling ATM-relative
+ * option OHLCV + IV + OI data spanning up to 5 years of history.
+ *
+ * Key constraints from Dhan documentation:
+ *   - fromDate to toDate window: maximum 30 calendar days per request.
+ *   - Interval: 1, 5, 15, 25, or 60 minutes.
+ *   - Strike range: index options support ATM±10; stock options support ATM±3.
+ *   - expiryCode: 0 = current expiry, 1 = next expiry, etc.
+ *   - expiryFlag: WEEK = weekly expiry, MONTH = monthly expiry.
+ */
+export interface DhanRollingOptionRequest {
+  /** Exchange segment, e.g. 'NSE_FNO' for index/stock F&O. */
+  exchangeSegment: DhanExchangeSegment;
+  /** Candle interval in minutes: '1' | '5' | '15' | '25' | '60'. */
+  interval: '1' | '5' | '15' | '25' | '60';
+  /** Underlying security ID (e.g. 13 for NIFTY, 25 for BANKNIFTY). */
+  securityId: string;
+  /** Instrument type: OPTIDX for index options, OPTSTK for stock options. */
+  instrument: 'OPTIDX' | 'OPTSTK';
+  /**
+   * Expiry type selector.
+   * WEEK = weekly expiry (e.g. every Thursday for NIFTY).
+   * MONTH = monthly expiry (last Thursday of the month).
+   */
+  expiryFlag: 'WEEK' | 'MONTH';
+  /**
+   * Expiry ordinal.
+   * 1 = current (nearest) expiry, 2 = next expiry, etc.
+   * Note: Dhan uses 1-indexed expiry codes — 0 is not a valid value.
+   */
+  expiryCode: 1 | 2 | 3 | 4;
+  /**
+   * ATM-relative strike offset.
+   * For OPTIDX: ATM-10 to ATM+10.
+   * For OPTSTK: ATM-3 to ATM+3.
+   * 'ATM' means at-the-money.
+   * '+' means out-of-the-money for CALL (or in-the-money for PUT).
+   * '-' means in-the-money for CALL (or out-of-the-money for PUT).
+   */
+  strike: DhanRollingOptionStrike;
+  /** Option type: CALL or PUT. */
+  drvOptionType: 'CALL' | 'PUT';
+  /**
+   * Fields to include in the response.
+   * Requesting only needed fields reduces response payload.
+   * 'strike' field gives the actual absolute strike price per candle.
+   * 'spot' field gives the underlying spot price per candle.
+   */
+  requiredData: DhanRollingOptionDataField[];
+  /** Range start, YYYY-MM-DD format. */
+  fromDate: string;
+  /**
+   * Range end, YYYY-MM-DD format.
+   * Note: toDate is NON-INCLUSIVE per Dhan API semantics.
+   * To fetch data through 2024-01-31, set toDate to 2024-02-01.
+   */
+  toDate: string;
+}
+
+/**
+ * Data arrays for one option leg (CE or PE) from the rolling option response.
+ * All arrays are parallel (index N corresponds to the same candle across fields).
+ * Fields not included in requiredData will be absent or empty arrays.
+ */
+export interface DhanRollingOptionLeg {
+  /** Opening prices for each candle. Present when 'open' in requiredData. */
+  open?: number[];
+  /** Period high prices. Present when 'high' in requiredData. */
+  high?: number[];
+  /** Period low prices. Present when 'low' in requiredData. */
+  low?: number[];
+  /** Closing prices. Present when 'close' in requiredData. */
+  close?: number[];
+  /** Traded volumes. Present when 'volume' in requiredData. */
+  volume?: number[];
+  /**
+   * Implied volatility (%). Present when 'iv' in requiredData.
+   * Values represent IV as a decimal percentage (e.g. 18.5 = 18.5%).
+   */
+  iv?: number[];
+  /**
+   * Actual absolute strike price at each candle timestamp.
+   * Present when 'strike' in requiredData.
+   * Shifts as the underlying moves and ATM rebalances across expirations.
+   */
+  strike?: number[];
+  /** Open interest (contracts). Present when 'oi' in requiredData. */
+  oi?: number[];
+  /**
+   * Underlying spot price at each candle timestamp.
+   * Present when 'spot' in requiredData.
+   * Useful for reconstructing the ATM offset and validating data consistency.
+   */
+  spot?: number[];
+  /** Unix epoch timestamps (seconds) for each candle. Always present. */
+  timestamp: number[];
+}
+
+/**
+ * Response from POST /v2/charts/rollingoption.
+ *
+ * The response always has a `data` wrapper with `ce` and `pe` legs.
+ * When only CALL is requested, `pe` is null and vice versa.
+ * Both can be null when no data is available for the period.
+ */
+export interface DhanRollingOptionResponse {
+  data: {
+    ce: DhanRollingOptionLeg | null;
+    pe: DhanRollingOptionLeg | null;
+  };
+}

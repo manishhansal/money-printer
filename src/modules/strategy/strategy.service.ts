@@ -605,6 +605,7 @@ export class StrategyService implements OnModuleInit {
     }
 
     strategy.isSuspended = false;
+    strategy.isActive = true; // restore active flag in case it was cleared while suspended
     await this.strategiesRepo.save(strategy);
 
     await this.persistStrategyPerformanceRecord(

@@ -116,7 +116,7 @@ const HEALTHY_INDICATORS: IndicatorSnapshot = {
   ema9: 99,
   ema21: 97,
   relVol: 1.2,
-  orb: { orbHigh: 102, orbLow: 98 },
+  orb: { orbHigh: 102, orbLow: 98, windowMinutes: 15 },
   candleCount: 50,
 };
 
