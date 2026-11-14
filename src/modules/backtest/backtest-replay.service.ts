@@ -456,7 +456,17 @@ export class BacktestReplayService {
       .orderBy('day', 'ASC')
       .getRawMany<{ day: string }>();
 
-    return rows.map((r) => r.day.toString().slice(0, 10));
+    // pg/TypeORM may return PostgreSQL DATE columns as a JavaScript Date object
+    // *or* as a plain "YYYY-MM-DD" string depending on the driver configuration.
+    // .toString().slice(0,10) on a Date gives "Fri Aug 14" (locale), not an ISO
+    // date — use toISOString() for Date objects to reliably get "YYYY-MM-DD".
+    return rows.map((r) => {
+      const v = r.day as Date | string;
+      if (v instanceof Date) {
+        return v.toISOString().slice(0, 10); // "2026-08-14T00:00:00.000Z" → "2026-08-14"
+      }
+      return String(v).slice(0, 10); // already "YYYY-MM-DD"
+    });
   }
 
   /**
@@ -628,12 +638,14 @@ export class BacktestReplayService {
       const window = spotCandles.slice(0, i + 1);
 
       // Compute indicators on the SPOT series (look-ahead-free)
+      // Pass prevDayCandles so computeRelativeVolume has a cross-day baseline.
       const indicators = this.computeIndicatorsForWindow(
         window,
         sessionStart,
         prevDayHigh,
         prevDayLow,
         minRelVol,
+        prevDayCandles,
       );
 
       // Evaluate the requested strategy
@@ -849,6 +861,7 @@ export class BacktestReplayService {
     prevDayHigh: number | null,
     prevDayLow: number | null,
     _minRelVol: number,
+    prevDayCandles: OHLCV[] = [],
   ): UnderlyingIndicators {
     const vwap = this.taService.computeVWAP(window);
     const rsi = this.taService.computeRSI(window);
@@ -859,7 +872,10 @@ export class BacktestReplayService {
     const macd = this.taService.computeMACD(window);
     const adx = this.taService.computeADX(window);
     const roc = this.taService.computeROC(window)?.roc ?? null;
-    const relVol = this.taService.computeRelativeVolume(window, 5);
+    // relVol needs at least 2 distinct sessions; include the previous day's candles
+    // as the historical baseline so the intraday relative volume is computable.
+    const relVolWindow = prevDayCandles.length > 0 ? [...prevDayCandles, ...window] : window;
+    const relVol = this.taService.computeRelativeVolume(relVolWindow, 1);
     const orb = this.taService.computeORBRange(window, sessionStart, 15);
     const currentPrice = window[window.length - 1].close;
 
@@ -1035,12 +1051,16 @@ export class BacktestReplayService {
       combinedTrades.push(dayTrades[0]);
     }
 
+    // Split combined trades into IS / OOS using the same boundary as individual strategies.
+    const combinedIS = combinedTrades.filter((t) => t.date < splitDate);
+    const combinedOOS = combinedTrades.filter((t) => t.date >= splitDate);
+
     return this.computeMetricsFromTrades(
       'A',
-      combinedTrades,
+      combinedTrades, // all trades for overall metrics
       tradingDays,
-      [],
-      combinedTrades.filter((t) => t.date < splitDate),
+      combinedIS, // in-sample subset (was swapped before — now correct)
+      combinedOOS, // out-of-sample subset
     );
   }
 
